@@ -5,4 +5,4 @@ type Stateful interface {
 	SetStatus(string) error
 }
 
-type Handler func() error
+type Handler func(args ...interface{}) error
