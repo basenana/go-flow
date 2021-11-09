@@ -1,8 +1,8 @@
 package plugin
 
 import (
-	"go-flow/flow"
-	"go-flow/fsm"
+	"github.com/zwwhdls/go-flow/flow"
+	"github.com/zwwhdls/go-flow/fsm"
 )
 
 type FlowBuilder interface {

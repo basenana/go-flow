@@ -1,8 +1,8 @@
 package controller
 
 import (
-	"go-flow/log"
-	"go-flow/storage"
+	"github.com/zwwhdls/go-flow/log"
+	"github.com/zwwhdls/go-flow/storage"
 )
 
 type Option struct {

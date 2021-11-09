@@ -1,6 +1,6 @@
 package fsm
 
-import "go-flow/log"
+import "github.com/zwwhdls/go-flow/log"
 
 type Option struct {
 	Name   string

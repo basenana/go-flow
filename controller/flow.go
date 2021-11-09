@@ -3,11 +3,11 @@ package controller
 import (
 	"context"
 	"fmt"
-	taskcontext "go-flow/context"
-	"go-flow/eventbus"
-	"go-flow/flow"
-	"go-flow/fsm"
-	"go-flow/plugin"
+	taskcontext "github.com/zwwhdls/go-flow/context"
+	"github.com/zwwhdls/go-flow/eventbus"
+	"github.com/zwwhdls/go-flow/flow"
+	"github.com/zwwhdls/go-flow/fsm"
+	"github.com/zwwhdls/go-flow/plugin"
 	"time"
 )
 

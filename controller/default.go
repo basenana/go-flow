@@ -1,6 +1,6 @@
 package controller
 
-import "go-flow/plugin"
+import "github.com/zwwhdls/go-flow/plugin"
 
 func buildHookWithDefault(hook plugin.Hook) plugin.Hook {
 	return hook

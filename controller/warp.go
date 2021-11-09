@@ -1,9 +1,9 @@
 package controller
 
 import (
-	"go-flow/flow"
-	"go-flow/fsm"
-	"go-flow/plugin"
+	"github.com/zwwhdls/go-flow/flow"
+	"github.com/zwwhdls/go-flow/fsm"
+	"github.com/zwwhdls/go-flow/plugin"
 )
 
 type flowWarp struct {

@@ -1,8 +1,8 @@
 package flow
 
 import (
-	"go-flow/context"
-	"go-flow/fsm"
+	"github.com/zwwhdls/go-flow/context"
+	"github.com/zwwhdls/go-flow/fsm"
 )
 
 type FID string
