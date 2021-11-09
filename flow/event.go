@@ -1,6 +1,6 @@
 package flow
 
-import "go-flow/eventbus"
+import "github.com/zwwhdls/go-flow/eventbus"
 
 const (
 	TriggerEvent        eventbus.Topic = "event.flow.trigger"

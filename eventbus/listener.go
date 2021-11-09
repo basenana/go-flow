@@ -9,6 +9,7 @@ type listener struct {
 	Fn        hook
 	ErrHandle errHandle
 	Block     bool
+	next      *listener
 }
 
 func (l *listener) do(args ...interface{}) {

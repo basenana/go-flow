@@ -1,7 +1,7 @@
 package storage
 
 import (
-	"go-flow/flow"
+	"github.com/zwwhdls/go-flow/flow"
 )
 
 type Interface interface {

@@ -1,9 +1,9 @@
 package controller
 
 import (
-	"go-flow/flow"
-	"go-flow/log"
-	"go-flow/storage"
+	"github.com/zwwhdls/go-flow/flow"
+	"github.com/zwwhdls/go-flow/log"
+	"github.com/zwwhdls/go-flow/storage"
 )
 
 type FlowController struct {

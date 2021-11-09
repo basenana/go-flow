@@ -2,10 +2,10 @@ package controller
 
 import (
 	"fmt"
-	"go-flow/context"
-	"go-flow/eventbus"
-	"go-flow/flow"
-	"go-flow/fsm"
+	"github.com/zwwhdls/go-flow/context"
+	"github.com/zwwhdls/go-flow/eventbus"
+	"github.com/zwwhdls/go-flow/flow"
+	"github.com/zwwhdls/go-flow/fsm"
 )
 
 func (c *FlowController) triggerTask(f *flowWarp, t flow.Task) {

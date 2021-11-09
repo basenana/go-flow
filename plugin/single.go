@@ -1,8 +1,8 @@
 package plugin
 
 import (
-	"go-flow/context"
-	"go-flow/flow"
+	"github.com/zwwhdls/go-flow/context"
+	"github.com/zwwhdls/go-flow/flow"
 )
 
 type SingleFlow struct {
