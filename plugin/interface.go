@@ -1,23 +1,31 @@
 package plugin
 
-import "go-flow/task"
+import (
+	"go-flow/flow"
+	"go-flow/fsm"
+)
 
 type FlowBuilder interface {
-	WhenTrigger() error
-	WhenInitFinish() error
-	WhenInitFailed() error
-	WhenExecuteSucceed() error
-	WhenExecuteFailed() error
-	WhenExecutePause() error
-	WhenExecuteResume() error
-	WhenExecuteCancel() error
+	Build() flow.Flow
+	GetFlowHook(flow.Flow) Hook
+	GetTaskHook(flow.Flow, flow.Task) Hook
+}
 
-	WhenTaskTrigger(taskName task.TName) error
-	WhenTaskInitFinish(taskName task.TName) error
-	WhenTaskInitFailed(taskName task.TName) error
-	WhenTaskExecuteSucceed(taskName task.TName) error
-	WhenTaskExecuteFailed(taskName task.TName) error
-	WhenTaskExecutePause(taskName task.TName) error
-	WhenTaskExecuteResume(taskName task.TName) error
-	WhenTaskExecuteCancel(taskName task.TName) error
+type Hook struct {
+	WhenTrigger        fsm.Handler
+	WhenInitFinish     fsm.Handler
+	WhenExecuteSucceed fsm.Handler
+	WhenExecuteFailed  fsm.Handler
+	WhenExecutePause   fsm.Handler
+	WhenExecuteResume  fsm.Handler
+	WhenExecuteCancel  fsm.Handler
+
+	WhenTaskTrigger        fsm.Handler
+	WhenTaskInitFinish     fsm.Handler
+	WhenTaskInitFailed     fsm.Handler
+	WhenTaskExecuteSucceed fsm.Handler
+	WhenTaskExecuteFailed  fsm.Handler
+	WhenTaskExecutePause   fsm.Handler
+	WhenTaskExecuteResume  fsm.Handler
+	WhenTaskExecuteCancel  fsm.Handler
 }

@@ -1,11 +1,13 @@
 package controller
 
 import (
+	"go-flow/flow"
 	"go-flow/log"
 	"go-flow/storage"
 )
 
 type FlowController struct {
+	flows map[flow.FID]*flowWarp
 	Storage storage.Interface
 	Logger  log.Logger
 }

@@ -5,30 +5,30 @@ import (
 	"go-flow/log"
 )
 
-type machine struct {
+type FSM struct {
 	logger log.Logger
 }
 
-func (m *machine) From(statues []string) *machine {
+func (m *FSM) From(statues []string) *FSM {
 	return m
 }
 
-func (m *machine) To(statue string) *machine {
+func (m *FSM) To(statue string) *FSM {
 	return m
 }
 
-func (m *machine) When(event eventbus.Topic) *machine {
+func (m *FSM) When(event eventbus.Topic) *FSM {
 	return m
 }
 
-func (m *machine) Do(handler Handler) *machine {
+func (m *FSM) Do(handler Handler) *FSM {
 	return m
 }
 
-func (m *machine) Close() error {
+func (m *FSM) Close() error {
 	return nil
 }
 
-func New(option Option) *machine {
-	return &machine{}
+func New(option Option) *FSM {
+	return &FSM{}
 }

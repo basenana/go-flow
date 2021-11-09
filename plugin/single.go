@@ -3,13 +3,12 @@ package plugin
 import (
 	"go-flow/context"
 	"go-flow/flow"
-	"go-flow/task"
 )
 
 type SingleFlow struct {
 }
 
-func (s SingleFlow) NextBatch(ctx context.FlowContext) ([]task.Task, error) {
+func (s SingleFlow) NextBatch(ctx context.FlowContext) ([]flow.Task, error) {
 	panic("implement me")
 }
 
