@@ -1,14 +1,13 @@
 package plugin
 
 import (
-	"github.com/zwwhdls/go-flow/context"
 	"github.com/zwwhdls/go-flow/flow"
 )
 
 type SingleFlow struct {
 }
 
-func (s SingleFlow) NextBatch(ctx context.FlowContext) ([]flow.Task, error) {
+func (s SingleFlow) NextBatch(ctx flow.FlowContext) ([]flow.Task, error) {
 	panic("implement me")
 }
 
@@ -24,11 +23,11 @@ func (s SingleFlow) SetStatus(s2 string) error {
 	panic("implement me")
 }
 
-func (s SingleFlow) Setup(ctx context.FlowContext) {
+func (s SingleFlow) Setup(ctx flow.FlowContext) {
 	panic("implement me")
 }
 
-func (s SingleFlow) Teardown(ctx context.FlowContext) {
+func (s SingleFlow) Teardown(ctx flow.FlowContext) {
 	panic("implement me")
 }
 

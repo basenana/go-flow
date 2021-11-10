@@ -2,7 +2,6 @@ package plugin
 
 import (
 	"github.com/zwwhdls/go-flow/flow"
-	"github.com/zwwhdls/go-flow/fsm"
 )
 
 type FlowBuilder interface {
@@ -12,20 +11,23 @@ type FlowBuilder interface {
 }
 
 type Hook struct {
-	WhenTrigger        fsm.Handler
-	WhenInitFinish     fsm.Handler
-	WhenExecuteSucceed fsm.Handler
-	WhenExecuteFailed  fsm.Handler
-	WhenExecutePause   fsm.Handler
-	WhenExecuteResume  fsm.Handler
-	WhenExecuteCancel  fsm.Handler
+	WhenTrigger        FlowHook
+	WhenInitFinish     FlowHook
+	WhenExecuteSucceed FlowHook
+	WhenExecuteFailed  FlowHook
+	WhenExecutePause   FlowHook
+	WhenExecuteResume  FlowHook
+	WhenExecuteCancel  FlowHook
 
-	WhenTaskTrigger        fsm.Handler
-	WhenTaskInitFinish     fsm.Handler
-	WhenTaskInitFailed     fsm.Handler
-	WhenTaskExecuteSucceed fsm.Handler
-	WhenTaskExecuteFailed  fsm.Handler
-	WhenTaskExecutePause   fsm.Handler
-	WhenTaskExecuteResume  fsm.Handler
-	WhenTaskExecuteCancel  fsm.Handler
+	WhenTaskTrigger        TaskHook
+	WhenTaskInitFinish     TaskHook
+	WhenTaskInitFailed     TaskHook
+	WhenTaskExecuteSucceed TaskHook
+	WhenTaskExecuteFailed  TaskHook
+	WhenTaskExecutePause   TaskHook
+	WhenTaskExecuteResume  TaskHook
+	WhenTaskExecuteCancel  TaskHook
 }
+
+type FlowHook func(ctx flow.FlowContext, f flow.Flow) error
+type TaskHook func(ctx flow.TaskContext, t flow.Task) error

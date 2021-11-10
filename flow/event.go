@@ -1,21 +1,33 @@
 package flow
 
-import "github.com/zwwhdls/go-flow/eventbus"
+import (
+	"fmt"
+	"github.com/zwwhdls/go-flow/eventbus"
+)
+
+type EventTopicTpl string
 
 const (
-	TriggerEvent        eventbus.Topic = "event.flow.trigger"
-	InitFinishEvent     eventbus.Topic = "event.flow.init.finish"
-	ExecuteSucceedEvent eventbus.Topic = "event.flow.execute.succeed"
-	ExecuteFailedEvent  eventbus.Topic = "event.flow.execute.failed"
-	ExecutePauseEvent   eventbus.Topic = "event.flow.execute.pause"
-	ExecuteResumeEvent  eventbus.Topic = "event.flow.execute.resume"
-	ExecuteCancelEvent  eventbus.Topic = "event.flow.execute.cancel"
+	TriggerEventTopicTpl        EventTopicTpl = "event.flow.%s.trigger"
+	InitFinishEventTopicTpl     EventTopicTpl = "event.flow.%s.init.finish"
+	ExecuteSucceedEventTopicTpl EventTopicTpl = "event.flow.%s.execute.succeed"
+	ExecuteFailedEventTopicTpl  EventTopicTpl = "event.flow.%s.execute.failed"
+	ExecutePauseEventTopicTpl   EventTopicTpl = "event.flow.%s.execute.pause"
+	ExecuteResumeEventTopicTpl  EventTopicTpl = "event.flow.%s.execute.resume"
+	ExecuteCancelEventTopicTpl  EventTopicTpl = "event.flow.%s.execute.cancel"
 
-	TaskTriggerEvent        eventbus.Topic = "event.task.trigger"
-	TaskInitFinishEvent     eventbus.Topic = "event.task.init.finish"
-	TaskExecuteSucceedEvent eventbus.Topic = "event.task.execute.succeed"
-	TaskExecuteFailedEvent  eventbus.Topic = "event.task.execute.failed"
-	TaskExecutePauseEvent   eventbus.Topic = "event.task.execute.pause"
-	TaskExecuteResumeEvent  eventbus.Topic = "event.task.execute.resume"
-	TaskExecuteCancelEvent  eventbus.Topic = "event.task.execute.cancel"
+	TaskTriggerEventTopicTpl        EventTopicTpl = "event.flow.%s.task.%s.trigger"
+	TaskInitFinishEventTopicTpl     EventTopicTpl = "event.flow.%s.task.%s.init.finish"
+	TaskExecuteSucceedEventTopicTpl EventTopicTpl = "event.flow.%s.task.%s.execute.succeed"
+	TaskExecuteFailedEventTopicTpl  EventTopicTpl = "event.flow.%s.task.%s.execute.failed"
+	TaskExecutePauseEventTopicTpl   EventTopicTpl = "event.flow.%s.task.%s.execute.pause"
+	TaskExecuteResumeEventTopicTpl  EventTopicTpl = "event.flow.%s.task.%s.execute.resume"
+	TaskExecuteCancelEventTopicTpl  EventTopicTpl = "event.flow.%s.task.%s.execute.cancel"
 )
+
+func GetFlowTopic(tpl EventTopicTpl, fid FID) eventbus.Topic {
+	return eventbus.Topic(fmt.Sprintf(string(tpl), fid))
+}
+func GetTaskTopic(tpl EventTopicTpl, fid FID, tName TName) eventbus.Topic {
+	return eventbus.Topic(fmt.Sprintf(string(tpl), fid, tName))
+}
