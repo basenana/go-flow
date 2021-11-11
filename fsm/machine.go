@@ -32,6 +32,8 @@ type FSM struct {
 	crtBuilder *edgeBuilder
 	mux        sync.Mutex
 	logger     log.Logger
+
+	StatusCh chan string
 }
 
 func (m *FSM) From(statues []string) *FSM {
@@ -69,6 +71,7 @@ func (m *FSM) Close() error {
 	for _, lID := range m.listeners {
 		eventbus.Unregister(lID)
 	}
+	close(m.StatusCh)
 	return nil
 }
 
@@ -111,20 +114,52 @@ func (m *FSM) buildWarp(f func(builder *edgeBuilder)) {
 		}
 		head = newEdge
 
-		lID := fmt.Sprintf("fsm.%s.%s", m.name, uuid.New().String())
+		lID := fmt.Sprintf("fsm.%s.%s", m.name, newEdge.when)
 		eventbus.Register(builder.when, eventbus.NewBlockListener(lID, func(args ...interface{}) error {
-			if m.obj.GetStatus() != newEdge.from {
-				return nil
-			}
-			if err := m.obj.SetStatus(newEdge.to); err != nil {
-				return err
-			}
-			return builder.do(args...)
+			return m.eventHandle(newEdge.when, args...)
 		}))
 		m.listeners = append(m.listeners, lID)
 	}
 }
 
+func (m *FSM) eventHandle(event eventbus.Topic, args ...interface{}) (err error) {
+	m.mux.Lock()
+	defer m.mux.Unlock()
+
+	head := m.graph[event]
+	if head == nil {
+		return nil
+	}
+
+	defer func() {
+		if panicErr := recover(); panicErr != nil {
+			err = fmt.Errorf("event %s handle panic: %v", event, panicErr)
+		}
+	}()
+
+	for head != nil {
+		if m.obj.GetStatus() == head.from {
+			if err := m.obj.SetStatus(head.to); err != nil {
+				return err
+			}
+			select {
+			case m.StatusCh <- head.to:
+			default:
+			}
+			return head.do(args...)
+		}
+		head = head.next
+	}
+	return nil
+}
+
 func New(option Option) *FSM {
-	return &FSM{}
+	return &FSM{
+		name:   fmt.Sprintf("%s.%s", option.Name, uuid.New().String()),
+		obj:    option.Obj,
+		graph:  map[eventbus.Topic]*edge{},
+		logger: option.Logger,
+
+		StatusCh: make(chan string),
+	}
 }
