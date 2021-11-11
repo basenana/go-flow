@@ -167,3 +167,11 @@ func isCurrentTaskAllFinish(tasks []flow.Task) bool {
 	}
 	return true
 }
+
+func statusChMerge(src, dst chan string) {
+	go func() {
+		for obj := range dst {
+			src <- obj
+		}
+	}()
+}
