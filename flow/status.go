@@ -1,7 +1,6 @@
 package flow
 
 const (
-	PendingStatus      = "pending"
 	CreatingStatus     = "creating"
 	InitializingStatus = "initializing"
 	RunningStatus      = "running"
@@ -9,4 +8,10 @@ const (
 	FailedStatus       = "failed"
 	PausedStatus       = "paused"
 	CanceledStatus     = "canceled"
+
+	PendingStatus          = "pending"
+	TaskInitializingStatus = "taskInitializing"
+	TaskRunningStatus      = "taskRunning"
+	TaskSucceedStatus      = "taskSucceed"
+	TaskFailedStatus       = "taskFailed"
 )

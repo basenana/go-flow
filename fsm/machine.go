@@ -33,7 +33,7 @@ type FSM struct {
 	mux        sync.Mutex
 	logger     log.Logger
 
-	StatusCh chan string
+	statusChs []chan string
 }
 
 func (m *FSM) From(statues []string) *FSM {
@@ -64,6 +64,10 @@ func (m *FSM) Do(handler Handler) *FSM {
 	return m
 }
 
+func (m *FSM) RegisterStatusCh(ch chan string) {
+	m.statusChs = append(m.statusChs, ch)
+}
+
 func (m *FSM) Close() error {
 	m.mux.Lock()
 	defer m.mux.Unlock()
@@ -71,7 +75,9 @@ func (m *FSM) Close() error {
 	for _, lID := range m.listeners {
 		eventbus.Unregister(lID)
 	}
-	close(m.StatusCh)
+	for _, ch := range m.statusChs {
+		close(ch)
+	}
 	return nil
 }
 
@@ -113,6 +119,7 @@ func (m *FSM) buildWarp(f func(builder *edgeBuilder)) {
 			next: head,
 		}
 		head = newEdge
+		m.graph[builder.when] = newEdge
 
 		lID := fmt.Sprintf("fsm.%s.%s", m.name, newEdge.when)
 		eventbus.Register(builder.when, eventbus.NewBlockListener(lID, func(args ...interface{}) error {
@@ -142,9 +149,11 @@ func (m *FSM) eventHandle(event eventbus.Topic, args ...interface{}) (err error)
 			if err := m.obj.SetStatus(head.to); err != nil {
 				return err
 			}
-			select {
-			case m.StatusCh <- head.to:
-			default:
+			for _, ch := range m.statusChs {
+				select {
+				case ch <- head.to:
+				default:
+				}
 			}
 			return head.do(args...)
 		}
@@ -155,11 +164,10 @@ func (m *FSM) eventHandle(event eventbus.Topic, args ...interface{}) (err error)
 
 func New(option Option) *FSM {
 	return &FSM{
-		name:   fmt.Sprintf("%s.%s", option.Name, uuid.New().String()),
-		obj:    option.Obj,
-		graph:  map[eventbus.Topic]*edge{},
-		logger: option.Logger,
-
-		StatusCh: make(chan string),
+		name:      fmt.Sprintf("%s.%s", option.Name, uuid.New().String()),
+		obj:       option.Obj,
+		graph:     map[eventbus.Topic]*edge{},
+		logger:    option.Logger,
+		statusChs: make([]chan string, 0),
 	}
 }

@@ -25,7 +25,7 @@ type hookWarp struct {
 	WhenTaskExecuteCancel  fsm.Handler
 }
 
-func buildHookWithDefault(ctx flow.FlowContext, f flow.Flow, hook plugin.Hook) hookWarp {
+func buildHookWithDefault(ctx *flow.FlowContext, f flow.Flow, hook plugin.Hook) hookWarp {
 	return hookWarp{
 		WhenTrigger: func(args ...interface{}) error {
 			if hook.WhenTrigger != nil {
@@ -72,7 +72,7 @@ func buildHookWithDefault(ctx flow.FlowContext, f flow.Flow, hook plugin.Hook) h
 	}
 }
 
-func buildTaskHookWithDefault(ctx flow.TaskContext, t flow.Task, hook plugin.Hook) hookWarp {
+func buildTaskHookWithDefault(ctx *flow.TaskContext, t flow.Task, hook plugin.Hook) hookWarp {
 	return hookWarp{
 		WhenTaskTrigger: func(args ...interface{}) error {
 			if hook.WhenTaskTrigger != nil {

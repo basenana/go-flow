@@ -29,5 +29,5 @@ type Hook struct {
 	WhenTaskExecuteCancel  TaskHook
 }
 
-type FlowHook func(ctx flow.FlowContext, f flow.Flow) error
-type TaskHook func(ctx flow.TaskContext, t flow.Task) error
+type FlowHook func(ctx *flow.FlowContext, f flow.Flow) error
+type TaskHook func(ctx *flow.TaskContext, t flow.Task) error
