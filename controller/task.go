@@ -6,6 +6,7 @@ import (
 	"github.com/zwwhdls/go-flow/eventbus"
 	"github.com/zwwhdls/go-flow/flow"
 	"github.com/zwwhdls/go-flow/fsm"
+	"github.com/zwwhdls/go-flow/plugin"
 	"sync"
 )
 
@@ -13,12 +14,10 @@ func (c *FlowController) triggerTask(ctx context.Context, f *flowWarp, t flow.Ta
 	c.Logger.Infof("Trigger task %s of flow %s", t.Name(), f.ID())
 	flowId := f.ID()
 	tName := t.Name()
-	tCtx := flow.TaskContext{
+	tCtx := flow.Context{
 		Mutex:    sync.Mutex{},
 		Context:  ctx,
-		Flow:     f.ctx,
 		TaskName: tName,
-		Operate:  flow.TaskInitOperate,
 	}
 	twarp := taskWarp{
 		Task:    t,
@@ -64,12 +63,7 @@ func (c *FlowController) triggerTask(ctx context.Context, f *flowWarp, t flow.Ta
 					if t.GetStatus() != flow.PausedStatus && t.GetStatus() != flow.FailedStatus {
 						continue
 					}
-					if twarp.ctx.Operate == flow.TaskInitOperate {
-						c.publishTask(flowId, tName, flow.GetTaskTopic(flow.TaskReTriggerEventTopicTpl, flowId, tName), f)
-					}
-					if twarp.ctx.Operate == flow.TaskExecuteOperate {
-						c.publishTask(flowId, tName, flow.GetTaskTopic(flow.TaskExecuteRetryEventTopicTpl, flowId, tName), f)
-					}
+					c.publishTask(flowId, tName, flow.GetTaskTopic(flow.TaskTriggerEventTopicTpl, flowId, tName), f)
 					continue
 				case flow.TaskSucceedStatus:
 					c.Logger.Infof("task %s of flow %s succeed. tear down.", string(flowId), string(tName))
@@ -81,11 +75,6 @@ func (c *FlowController) triggerTask(ctx context.Context, f *flowWarp, t flow.Ta
 					return
 				case flow.TaskInitializingStatus:
 					err := t.Setup(&tCtx)
-					func() {
-						defer twarp.ctx.Mutex.Unlock()
-						twarp.ctx.Mutex.Lock()
-						twarp.ctx.Operate = flow.TaskInitOperate
-					}()
 					if err != nil {
 						c.Logger.Errorf("Task %s of %s init error: %v", tName, flowId, err)
 						c.publishTask(flowId, tName, flow.GetTaskTopic(flow.TaskExecuteFailedEventTopicTpl, flowId, tName), f)
@@ -94,11 +83,6 @@ func (c *FlowController) triggerTask(ctx context.Context, f *flowWarp, t flow.Ta
 					}
 				case flow.TaskRunningStatus:
 					c.Logger.Infof("task %s of flow %s execute", tName, flowId)
-					func() {
-						defer twarp.ctx.Mutex.Unlock()
-						twarp.ctx.Mutex.Lock()
-						twarp.ctx.Operate = flow.TaskExecuteOperate
-					}()
 					go twarp.Do(twarp.ctx)
 					continue
 				}
@@ -114,8 +98,9 @@ func (c *FlowController) publishTask(fId flow.FID, tName flow.TName, t eventbus.
 	eventbus.Publish(t, args)
 }
 
-func initTaskFsm(ctx *flow.TaskContext, f *flowWarp, t flow.Task) *fsm.FSM {
-	hook := buildTaskHookWithDefault(ctx, t, f.builder.GetTaskHook(f.Flow, t))
+func initTaskFsm(ctx *flow.Context, f *flowWarp, t flow.Task) *fsm.FSM {
+	hooks := t.GetHooks()
+
 	m := fsm.New(fsm.Option{
 		Name:   fmt.Sprintf("task.%s.%s", f.ID(), t.Name()),
 		Obj:    t,
@@ -125,46 +110,36 @@ func initTaskFsm(ctx *flow.TaskContext, f *flowWarp, t flow.Task) *fsm.FSM {
 	m.From([]string{flow.PendingStatus}).
 		To(flow.TaskInitializingStatus).
 		When(flow.GetTaskTopic(flow.TaskTriggerEventTopicTpl, f.ID(), t.Name())).
-		Do(hook.WhenTaskTrigger)
-
-	m.From([]string{flow.TaskInitializingStatus}).
-		To(flow.TaskRunningStatus).
-		When(flow.GetTaskTopic(flow.TaskInitFinishEventTopicTpl, f.ID(), t.Name())).
-		Do(hook.WhenTaskInitFinish)
+		Do(taskHookDecorator(ctx, f, t, hooks[plugin.WhenTaskTrigger]))
 
 	m.From([]string{flow.TaskRunningStatus}).
 		To(flow.TaskSucceedStatus).
 		When(flow.GetTaskTopic(flow.TaskExecuteSucceedEventTopicTpl, f.ID(), t.Name())).
-		Do(hook.WhenTaskExecuteSucceed)
+		Do(taskHookDecorator(ctx, f, t, hooks[plugin.WhenTaskExecuteSucceed]))
 
 	m.From([]string{flow.TaskInitializingStatus, flow.TaskRunningStatus}).
 		To(flow.TaskFailedStatus).
 		When(flow.GetTaskTopic(flow.TaskExecuteFailedEventTopicTpl, f.ID(), t.Name())).
-		Do(hook.WhenExecuteFailed)
+		Do(taskHookDecorator(ctx, f, t, hooks[plugin.WhenTaskExecuteFailed]))
 
 	m.From([]string{flow.TaskFailedStatus}).
 		To(flow.TaskInitializingStatus).
-		When(flow.GetTaskTopic(flow.TaskReTriggerEventTopicTpl, f.ID(), t.Name())).
-		Do(hook.WhenTaskExecuteResume)
-
-	m.From([]string{flow.TaskFailedStatus}).
-		To(flow.TaskRunningStatus).
 		When(flow.GetTaskTopic(flow.TaskExecuteRetryEventTopicTpl, f.ID(), t.Name())).
-		Do(hook.WhenTaskExecuteResume)
+		Do(taskHookDecorator(ctx, f, t, hooks[plugin.WhenTaskExecuteResume]))
 
 	m.From([]string{flow.PausedStatus, flow.TaskInitializingStatus, flow.TaskRunningStatus}).
 		To(flow.CanceledStatus).
 		When(flow.GetTaskTopic(flow.TaskExecuteCancelEventTopicTpl, f.ID(), t.Name())).
-		Do(hook.WhenTaskExecuteCancel)
+		Do(taskHookDecorator(ctx, f, t, hooks[plugin.WhenTaskExecuteCancel]))
 
 	m.From([]string{flow.TaskRunningStatus}).
 		To(flow.PausedStatus).
 		When(flow.GetTaskTopic(flow.TaskExecutePauseEventTopicTpl, f.ID(), t.Name())).
-		Do(hook.WhenTaskExecutePause)
+		Do(taskHookDecorator(ctx, f, t, hooks[plugin.WhenTaskExecutePause]))
 
 	m.From([]string{flow.PausedStatus}).
 		To(flow.TaskRunningStatus).
 		When(flow.GetTaskTopic(flow.TaskExecuteResumeEventTopicTpl, f.ID(), t.Name())).
-		Do(hook.WhenTaskExecuteResume)
+		Do(taskHookDecorator(ctx, f, t, hooks[plugin.WhenTaskExecuteResume]))
 	return m
 }

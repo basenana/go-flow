@@ -8,7 +8,7 @@ import (
 
 type flowWarp struct {
 	flow.Flow
-	ctx          *flow.FlowContext
+	ctx          *flow.Context
 	machine      *fsm.FSM
 	builder      plugin.FlowBuilder
 	currentTasks []flow.Task
@@ -17,7 +17,7 @@ type flowWarp struct {
 
 type taskWarp struct {
 	flow.Task
-	ctx     *flow.TaskContext
+	ctx     *flow.Context
 	fid     flow.FID
 	machine *fsm.FSM
 }

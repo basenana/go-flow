@@ -7,9 +7,10 @@ import (
 
 type EventTopicTpl string
 
+const FlowTopic EventTopicTpl = ""
+
 const (
 	TriggerEventTopicTpl        EventTopicTpl = "event.flow.%s.trigger"
-	ReTriggerEventTopicTpl      EventTopicTpl = "event.flow.%s.retrigger"
 	InitFinishEventTopicTpl     EventTopicTpl = "event.flow.%s.init.finish"
 	ExecuteSucceedEventTopicTpl EventTopicTpl = "event.flow.%s.execute.succeed"
 	ExecuteFailedEventTopicTpl  EventTopicTpl = "event.flow.%s.execute.failed"
@@ -19,7 +20,6 @@ const (
 	ExecuteCancelEventTopicTpl  EventTopicTpl = "event.flow.%s.execute.cancel"
 
 	TaskTriggerEventTopicTpl        EventTopicTpl = "event.flow.%s.task.%s.trigger"
-	TaskReTriggerEventTopicTpl      EventTopicTpl = "event.flow.%s.task.%s.retrigger"
 	TaskInitFinishEventTopicTpl     EventTopicTpl = "event.flow.%s.task.%s.init.finish"
 	TaskExecuteSucceedEventTopicTpl EventTopicTpl = "event.flow.%s.task.%s.execute.succeed"
 	TaskExecuteFailedEventTopicTpl  EventTopicTpl = "event.flow.%s.task.%s.execute.failed"

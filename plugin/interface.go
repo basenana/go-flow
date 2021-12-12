@@ -6,28 +6,25 @@ import (
 
 type FlowBuilder interface {
 	Build() flow.Flow
-	GetFlowHook(flow.Flow) Hook
-	GetTaskHook(flow.Flow, flow.Task) Hook
 }
 
-type Hook struct {
-	WhenTrigger        FlowHook
-	WhenInitFinish     FlowHook
-	WhenExecuteSucceed FlowHook
-	WhenExecuteFailed  FlowHook
-	WhenExecutePause   FlowHook
-	WhenExecuteResume  FlowHook
-	WhenExecuteCancel  FlowHook
+type HookType string
+type Hooks map[HookType]Hook
 
-	WhenTaskTrigger        TaskHook
-	WhenTaskInitFinish     TaskHook
-	WhenTaskInitFailed     TaskHook
-	WhenTaskExecuteSucceed TaskHook
-	WhenTaskExecuteFailed  TaskHook
-	WhenTaskExecutePause   TaskHook
-	WhenTaskExecuteResume  TaskHook
-	WhenTaskExecuteCancel  TaskHook
-}
+const (
+	WhenTrigger        HookType = "Trigger"
+	WhenExecuteSucceed HookType = "Succeed"
+	WhenExecuteFailed  HookType = "Failed"
+	WhenExecutePause   HookType = "Pause"
+	WhenExecuteResume  HookType = "Resume"
+	WhenExecuteCancel  HookType = "Cancel"
 
-type FlowHook func(ctx *flow.FlowContext, f flow.Flow) error
-type TaskHook func(ctx *flow.TaskContext, t flow.Task) error
+	WhenTaskTrigger        HookType = "TaskTrigger"
+	WhenTaskExecuteSucceed HookType = "TaskSucceed"
+	WhenTaskExecuteFailed  HookType = "TaskFailed"
+	WhenTaskExecutePause   HookType = "TaskPause"
+	WhenTaskExecuteResume  HookType = "TaskResume"
+	WhenTaskExecuteCancel  HookType = "TaskCancel"
+)
+
+type Hook func(ctx *flow.Context, f flow.Flow, t flow.Task) error

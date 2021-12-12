@@ -6,44 +6,20 @@ import (
 	"sync"
 )
 
-type FlowContext struct {
+type Context struct {
 	sync.Mutex
 	context.Context
-	FlowId  FID
-	Operate FlowOperate
-}
-
-type TaskContext struct {
-	sync.Mutex
-	context.Context
-	Flow     *FlowContext
+	FlowId   FID
 	TaskName TName
-	Operate  TaskOperate
 	MaxRetry int
 	Retry    int
 }
 
-type TaskOperate string
-
-var (
-	TaskInitOperate     TaskOperate = "task.init"
-	TaskExecuteOperate  TaskOperate = "task.execute"
-	TaskTeardownOperate TaskOperate = "task.teardown"
-)
-
-type FlowOperate string
-
-var (
-	FlowInitOperate     FlowOperate = "flow.init"
-	FlowExecuteOperate  FlowOperate = "flow.execute"
-	FlowTeardownOperate FlowOperate = "flow.teardown"
-)
-
-func (tc *TaskContext) Succeed() {
-	eventbus.Publish(GetTaskTopic(TaskExecuteSucceedEventTopicTpl, tc.Flow.FlowId, tc.TaskName))
+func (c *Context) Succeed() {
+	eventbus.Publish(GetTaskTopic(TaskExecuteSucceedEventTopicTpl, c.FlowId, c.TaskName))
 }
 
-func (tc *TaskContext) Fail(MaxRetry int) {
-	tc.MaxRetry = MaxRetry
-	eventbus.Publish(GetTaskTopic(TaskExecuteFailedEventTopicTpl, tc.Flow.FlowId, tc.TaskName))
+func (c *Context) Fail(MaxRetry int) {
+	c.MaxRetry = MaxRetry
+	eventbus.Publish(GetTaskTopic(TaskExecuteFailedEventTopicTpl, c.FlowId, c.TaskName))
 }

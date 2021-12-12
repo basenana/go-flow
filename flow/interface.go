@@ -2,6 +2,7 @@ package flow
 
 import (
 	"github.com/zwwhdls/go-flow/fsm"
+	"github.com/zwwhdls/go-flow/plugin"
 )
 
 type FID string
@@ -9,9 +10,10 @@ type FID string
 type Flow interface {
 	fsm.Stateful
 	ID() FID
-	Setup(ctx *FlowContext) error
-	Teardown(ctx *FlowContext)
-	NextBatch(ctx *FlowContext) ([]Task, error)
+	GetHooks() plugin.Hooks
+	Setup(ctx *Context) error
+	Teardown(ctx *Context)
+	NextBatch(ctx *Context) ([]Task, error)
 }
 
 type TName string
@@ -19,7 +21,8 @@ type TName string
 type Task interface {
 	fsm.Stateful
 	Name() TName
-	Setup(ctx *TaskContext) error
-	Do(ctx *TaskContext)
-	Teardown(ctx *TaskContext)
+	GetHooks() plugin.Hooks
+	Setup(ctx *Context) error
+	Do(ctx *Context)
+	Teardown(ctx *Context)
 }

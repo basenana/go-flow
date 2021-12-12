@@ -7,7 +7,6 @@ import (
 	"github.com/zwwhdls/go-flow/flow"
 	"github.com/zwwhdls/go-flow/fsm"
 	"github.com/zwwhdls/go-flow/plugin"
-	"sync"
 	"time"
 )
 
@@ -16,16 +15,14 @@ const DefaultTaskBatchInterval = 15 * time.Second
 func (c *FlowController) NewFlow(ctx context.Context, builder plugin.FlowBuilder) flow.Flow {
 	f := builder.Build()
 	c.Logger.Infof("Build flow %s", f.ID())
-	flowCtx := flow.FlowContext{
-		Mutex:   sync.Mutex{},
+	flowCtx := flow.Context{
 		Context: ctx,
 		FlowId:  f.ID(),
-		Operate: flow.FlowInitOperate,
 	}
 	w := flowWarp{
 		Flow:    f,
 		ctx:     &flowCtx,
-		machine: initFlowFsm(&flowCtx, f, builder),
+		machine: initFlowFsm(&flowCtx, f),
 		builder: builder,
 	}
 	f.SetStatus(flow.CreatingStatus)
@@ -44,7 +41,7 @@ func (c *FlowController) TriggerFlow(flowId flow.FID) error {
 	return nil
 }
 
-func (c *FlowController) triggerFlow(ctx *flow.FlowContext, warp *flowWarp) {
+func (c *FlowController) triggerFlow(ctx *flow.Context, warp *flowWarp) {
 	flowId := warp.ID()
 	var (
 		tasks []flow.Task
@@ -82,11 +79,6 @@ func (c *FlowController) triggerFlow(ctx *flow.FlowContext, warp *flowWarp) {
 					return
 				case flow.InitializingStatus:
 					err := warp.Setup(ctx)
-					func() {
-						defer warp.ctx.Mutex.Unlock()
-						warp.ctx.Mutex.Lock()
-						warp.ctx.Operate = flow.FlowInitOperate
-					}()
 					if err != nil {
 						c.Logger.Errorf("Flow %s init error: %v", flowId, err)
 						c.publishFlow(flowId, flow.GetFlowTopic(flow.ExecuteFailedEventTopicTpl, flowId), warp)
@@ -97,11 +89,6 @@ func (c *FlowController) triggerFlow(ctx *flow.FlowContext, warp *flowWarp) {
 				case flow.TaskSucceedStatus:
 					fallthrough
 				case flow.RunningStatus:
-					func() {
-						defer warp.ctx.Mutex.Unlock()
-						warp.ctx.Mutex.Lock()
-						warp.ctx.Operate = flow.FlowExecuteOperate
-					}()
 					if !isCurrentTaskAllFinish(warp.currentTasks) {
 						c.Logger.Infof("Task not all finish.")
 						continue
@@ -188,34 +175,21 @@ func (c *FlowController) ResumeFlow(flowId flow.FID) error {
 	}
 }
 
-func (c *FlowController) RetriggerFlow(flowId flow.FID) error {
-	c.Logger.Infof("Retrigger flow %s", flowId)
-	f, ok := c.flows[flowId]
-	if !ok {
-		return fmt.Errorf("flow %s not found", flowId)
-	}
-	if f.GetStatus() == flow.FailedStatus && f.ctx.Operate == flow.FlowInitOperate {
-		c.publishFlow(flowId, flow.GetFlowTopic(flow.ReTriggerEventTopicTpl, flowId), f)
-		return nil
-	}
-	return fmt.Errorf("flow current is %s, can not retrigger", f.GetStatus())
-}
-
 func (c *FlowController) RetryFlow(flowId flow.FID) error {
 	c.Logger.Infof("Retry flow %s", flowId)
 	f, ok := c.flows[flowId]
 	if !ok {
 		return fmt.Errorf("flow %s not found", flowId)
 	}
-	if f.GetStatus() == flow.FailedStatus && f.ctx.Operate == flow.FlowExecuteOperate {
+	if f.GetStatus() == flow.FailedStatus {
 		c.publishFlow(flowId, flow.GetFlowTopic(flow.ExecuteRetryEventTopicTpl, flowId), f)
 		return nil
 	}
 	return fmt.Errorf("flow current is %s, can not retry", f.GetStatus())
 }
 
-func initFlowFsm(ctx *flow.FlowContext, f flow.Flow, builder plugin.FlowBuilder) *fsm.FSM {
-	hook := buildHookWithDefault(ctx, f, builder.GetFlowHook(f))
+func initFlowFsm(ctx *flow.Context, f flow.Flow) *fsm.FSM {
+	hooks := f.GetHooks()
 
 	m := fsm.New(fsm.Option{
 		Name:   fmt.Sprintf("flow.%s", f.ID()),
@@ -226,47 +200,37 @@ func initFlowFsm(ctx *flow.FlowContext, f flow.Flow, builder plugin.FlowBuilder)
 	m.From([]string{flow.CreatingStatus}).
 		To(flow.InitializingStatus).
 		When(flow.GetFlowTopic(flow.TriggerEventTopicTpl, f.ID())).
-		Do(hook.WhenTrigger)
-
-	m.From([]string{flow.InitializingStatus}).
-		To(flow.RunningStatus).
-		When(flow.GetFlowTopic(flow.InitFinishEventTopicTpl, f.ID())).
-		Do(hook.WhenInitFinish)
+		Do(flowHookDecorator(ctx, f, hooks[plugin.WhenTrigger]))
 
 	m.From([]string{flow.RunningStatus}).
 		To(flow.SucceedStatus).
 		When(flow.GetFlowTopic(flow.ExecuteSucceedEventTopicTpl, f.ID())).
-		Do(hook.WhenExecuteSucceed)
+		Do(flowHookDecorator(ctx, f, hooks[plugin.WhenExecuteSucceed]))
 
 	m.From([]string{flow.InitializingStatus, flow.RunningStatus}).
 		To(flow.FailedStatus).
 		When(flow.GetFlowTopic(flow.ExecuteFailedEventTopicTpl, f.ID())).
-		Do(hook.WhenExecuteFailed)
+		Do(flowHookDecorator(ctx, f, hooks[plugin.WhenExecuteFailed]))
 
 	m.From([]string{flow.FailedStatus}).
 		To(flow.InitializingStatus).
-		When(flow.GetFlowTopic(flow.ReTriggerEventTopicTpl, f.ID())).
-		Do(hook.WhenExecuteResume)
-
-	m.From([]string{flow.FailedStatus}).
-		To(flow.RunningStatus).
 		When(flow.GetFlowTopic(flow.ExecuteRetryEventTopicTpl, f.ID())).
-		Do(hook.WhenExecuteResume)
+		Do(flowHookDecorator(ctx, f, hooks[plugin.WhenExecuteResume]))
 
 	m.From([]string{flow.CreatingStatus, flow.InitializingStatus, flow.RunningStatus}).
 		To(flow.CanceledStatus).
 		When(flow.GetFlowTopic(flow.ExecuteCancelEventTopicTpl, f.ID())).
-		Do(hook.WhenExecuteCancel)
+		Do(flowHookDecorator(ctx, f, hooks[plugin.WhenExecuteCancel]))
 
 	m.From([]string{flow.RunningStatus}).
 		To(flow.PausedStatus).
 		When(flow.GetFlowTopic(flow.ExecutePauseEventTopicTpl, f.ID())).
-		Do(hook.WhenExecutePause)
+		Do(flowHookDecorator(ctx, f, hooks[plugin.WhenExecutePause]))
 
 	m.From([]string{flow.PausedStatus}).
 		To(flow.RunningStatus).
 		When(flow.GetFlowTopic(flow.ExecuteResumeEventTopicTpl, f.ID())).
-		Do(hook.WhenExecuteResume)
+		Do(flowHookDecorator(ctx, f, hooks[plugin.WhenExecuteResume]))
 
 	return m
 }
@@ -283,12 +247,4 @@ func isCurrentTaskAllFinish(tasks []flow.Task) bool {
 		}
 	}
 	return true
-}
-
-func statusChCopy(src, dst chan string) {
-	go func() {
-		for obj := range dst {
-			src <- obj
-		}
-	}()
 }
