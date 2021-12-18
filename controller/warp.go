@@ -1,16 +1,16 @@
 package controller
 
 import (
+	"github.com/zwwhdls/go-flow/ext"
 	"github.com/zwwhdls/go-flow/flow"
 	"github.com/zwwhdls/go-flow/fsm"
-	"github.com/zwwhdls/go-flow/plugin"
 )
 
 type flowWarp struct {
 	flow.Flow
 	ctx          *flow.Context
 	machine      *fsm.FSM
-	builder      plugin.FlowBuilder
+	builder      ext.FlowBuilder
 	currentTasks []flow.Task
 	flowCh       chan string
 }

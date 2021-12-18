@@ -1,8 +1,10 @@
 package fsm
 
 type Stateful interface {
-	GetStatus() string
-	SetStatus(string) error
+	GetStatus() Status
+	SetStatus(status Status)
+	GetMessage() string
+	SetMessage(msg string)
 }
 
-type Handler func(args ...interface{}) error
+type Handler func(obj Event) error

@@ -1,4 +1,4 @@
-package plugin
+package ext
 
 import (
 	"fmt"
@@ -12,17 +12,17 @@ type SingleFlow struct {
 	tasks  []*SingleTask
 }
 
-func (s *SingleFlow) GetHooks() Hooks {
-	return map[HookType]Hook{
-		WhenTrigger: func(ctx *flow.Context, f flow.Flow, t flow.Task) error {
+func (s *SingleFlow) GetHooks() flow.Hooks {
+	return map[flow.HookType]flow.Hook{
+		flow.WhenTrigger: func(ctx *flow.Context, f flow.Flow, t flow.Task) error {
 			fmt.Println("flow trigger")
 			return nil
 		},
-		WhenExecuteSucceed: func(ctx *flow.Context, f flow.Flow, t flow.Task) error {
+		flow.WhenExecuteSucceed: func(ctx *flow.Context, f flow.Flow, t flow.Task) error {
 			fmt.Println("flow succeed")
 			return nil
 		},
-		WhenExecuteFailed: func(ctx *flow.Context, f flow.Flow, t flow.Task) error {
+		flow.WhenExecuteFailed: func(ctx *flow.Context, f flow.Flow, t flow.Task) error {
 			fmt.Println("flow failed")
 			return nil
 		},
@@ -83,9 +83,9 @@ func (s *SingleTask) Name() flow.TName {
 	return flow.TName(s.name)
 }
 
-func (s *SingleTask) GetHooks() Hooks {
-	return map[HookType]Hook{
-		WhenTaskExecuteSucceed: func(ctx *flow.Context, f flow.Flow, t flow.Task) error {
+func (s *SingleTask) GetHooks() flow.Hooks {
+	return map[flow.HookType]flow.Hook{
+		flow.WhenTaskExecuteSucceed: func(ctx *flow.Context, f flow.Flow, t flow.Task) error {
 			fmt.Println("task succeed")
 			return nil
 		},

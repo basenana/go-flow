@@ -1,12 +1,4 @@
-package plugin
-
-import (
-	"github.com/zwwhdls/go-flow/flow"
-)
-
-type FlowBuilder interface {
-	Build() flow.Flow
-}
+package flow
 
 type HookType string
 type Hooks map[HookType]Hook
@@ -27,4 +19,4 @@ const (
 	WhenTaskExecuteCancel  HookType = "TaskCancel"
 )
 
-type Hook func(ctx *flow.Context, f flow.Flow, t flow.Task) error
+type Hook func(ctx Context, f Flow, t Task) error

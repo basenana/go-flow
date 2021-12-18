@@ -1,9 +1,13 @@
 package fsm
 
-import "github.com/zwwhdls/go-flow/log"
+import (
+	"github.com/zwwhdls/go-flow/eventbus"
+	"github.com/zwwhdls/go-flow/log"
+)
 
 type Option struct {
 	Name   string
 	Obj    Stateful
+	Topic  eventbus.Topic
 	Logger log.Logger
 }

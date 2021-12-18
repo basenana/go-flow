@@ -1,13 +1,15 @@
 package flow
 
+import "github.com/zwwhdls/go-flow/fsm"
+
 const (
-	CreatingStatus     = "creating"
-	InitializingStatus = "initializing"
-	RunningStatus      = "running"
-	SucceedStatus      = "succeed"
-	FailedStatus       = "failed"
-	PausedStatus       = "paused"
-	CanceledStatus     = "canceled"
+	CreatingStatus     fsm.Status = "creating"
+	InitializingStatus            = "initializing"
+	RunningStatus                 = "running"
+	SucceedStatus                 = "succeed"
+	FailedStatus                  = "failed"
+	PausedStatus                  = "paused"
+	CanceledStatus                = "canceled"
 
 	PendingStatus          = "pending"
 	TaskInitializingStatus = "taskInitializing"
