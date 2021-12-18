@@ -2,124 +2,58 @@ package ext
 
 import (
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/zwwhdls/go-flow/flow"
-	"time"
 )
 
 type SingleFlow struct {
-	id     string
-	status string
-	tasks  []*SingleTask
-}
-
-func (s *SingleFlow) GetHooks() flow.Hooks {
-	return map[flow.HookType]flow.Hook{
-		flow.WhenTrigger: func(ctx *flow.Context, f flow.Flow, t flow.Task) error {
-			fmt.Println("flow trigger")
-			return nil
-		},
-		flow.WhenExecuteSucceed: func(ctx *flow.Context, f flow.Flow, t flow.Task) error {
-			fmt.Println("flow succeed")
-			return nil
-		},
-		flow.WhenExecuteFailed: func(ctx *flow.Context, f flow.Flow, t flow.Task) error {
-			fmt.Println("flow failed")
-			return nil
-		},
-	}
-}
-
-func (s *SingleFlow) ID() flow.FID {
-	return flow.FID(s.id)
-}
-
-func (s *SingleFlow) GetStatus() string {
-	return s.status
-}
-
-func (s *SingleFlow) SetStatus(s2 string) error {
-	s.status = s2
-	return nil
-}
-
-func (s *SingleFlow) Setup(ctx *flow.Context) error {
-	fmt.Printf("flow %s init succeed.\n", s.id)
-	return nil
-}
-
-func (s *SingleFlow) Teardown(ctx *flow.Context) {
-	fmt.Printf("flow %s tear down succeed.\n", s.id)
-}
-
-func (s *SingleFlow) NextBatch(ctx *flow.Context) ([]flow.Task, error) {
-	tasks := []flow.Task{}
-	for _, t := range s.tasks {
-		if t.GetStatus() != flow.TaskSucceedStatus {
-			tasks = append(tasks, t)
-		}
-	}
-	return tasks, nil
+	*basic
+	tasks []flow.Task
 }
 
 var _ flow.Flow = &SingleFlow{}
 
-type SingleTask struct {
-	name   string
-	status string
+func (s SingleFlow) GetHooks() flow.Hooks {
+	return map[flow.HookType]flow.Hook{}
 }
 
-var _ flow.Task = &SingleTask{}
-
-func (s *SingleTask) GetStatus() string {
-	return s.status
-}
-
-func (s *SingleTask) SetStatus(s2 string) error {
-	s.status = s2
+func (s SingleFlow) Setup(ctx *flow.Context) error {
 	return nil
 }
 
-func (s *SingleTask) Name() flow.TName {
-	return flow.TName(s.name)
+func (s SingleFlow) Teardown(ctx *flow.Context) {
+	return
 }
 
-func (s *SingleTask) GetHooks() flow.Hooks {
-	return map[flow.HookType]flow.Hook{
-		flow.WhenTaskExecuteSucceed: func(ctx *flow.Context, f flow.Flow, t flow.Task) error {
-			fmt.Println("task succeed")
-			return nil
-		},
+func (s *SingleFlow) NextBatch(ctx *flow.Context) ([]flow.Task, error) {
+	if len(s.tasks) == 0 {
+		return nil, nil
 	}
-}
 
-func (s *SingleTask) Setup(ctx *flow.Context) error {
-	fmt.Printf("task %s init succeed.\n", s.name)
-	return nil
-}
+	t := s.tasks[0]
+	s.tasks = s.tasks[1:]
 
-func (s *SingleTask) Do(ctx *flow.Context) {
-	time.Sleep(1 * time.Second)
-	fmt.Printf("task %s execute succeed.\n", s.name)
-	ctx.Succeed()
-}
-
-func (s *SingleTask) Teardown(ctx *flow.Context) {
-	fmt.Printf("task %s tear down succeed.\n", s.name)
+	return []flow.Task{t}, nil
 }
 
 type SingleFlowBuilder struct {
-}
-
-func (s SingleFlowBuilder) Build() flow.Flow {
-	f := SingleFlow{
-		id: "f",
-		tasks: []*SingleTask{
-			{name: "t1"},
-			{name: "t2"},
-			{name: "t3"},
-		},
-	}
-	return &f
+	tasks  []flow.Task
+	policy flow.ControlPolicy
 }
 
 var _ FlowBuilder = SingleFlowBuilder{}
+
+func (s SingleFlowBuilder) Build() flow.Flow {
+	return &SingleFlow{
+		basic: &basic{
+			id:     flow.FID(fmt.Sprintf("single-flow-%s", uuid.New().String())),
+			status: flow.CreatingStatus,
+			policy: s.policy,
+		},
+		tasks: s.tasks,
+	}
+}
+
+func NewSingleFlowBuilder(tasks []flow.Task, policy flow.ControlPolicy) FlowBuilder {
+	return SingleFlowBuilder{tasks: tasks, policy: policy}
+}

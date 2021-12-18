@@ -7,26 +7,27 @@ import (
 	"github.com/zwwhdls/go-flow/flow"
 	"github.com/zwwhdls/go-flow/fsm"
 	"github.com/zwwhdls/go-flow/log"
+	"reflect"
 	"sync"
 )
 
 type runner struct {
 	flow.Flow
 
-	ctx    flow.Context
+	ctx    *flow.Context
 	stopCh chan struct{}
 	pause  sync.Mutex
 	fsm    *fsm.FSM
 
 	batch     []flow.Task
-	batchCtx  flow.Context
+	batchCtx  *flow.Context
 	batchCanF context.CancelFunc
 
 	topic  eventbus.Topic
 	logger log.Logger
 }
 
-func (r *runner) start(ctx flow.Context) error {
+func (r *runner) start(ctx *flow.Context) error {
 	r.ctx = ctx
 	r.topic = flow.EventTopic(r.ID())
 	r.SetStatus(flow.InitializingStatus)
@@ -98,7 +99,7 @@ func (r *runner) flowRun(event fsm.Event) error {
 			r.pause.Unlock()
 
 			batchCtx, canF := context.WithCancel(r.ctx.Context)
-			r.batchCtx = flow.Context{
+			r.batchCtx = &flow.Context{
 				Context:  batchCtx,
 				FlowId:   r.ID(),
 				MaxRetry: r.ctx.MaxRetry,
@@ -292,20 +293,27 @@ func (r *runner) runBatchTasks() error {
 func (r *runner) taskRun(event fsm.Event) error {
 	task := event.Obj.(flow.Task)
 
+	if reflect.ValueOf(task).Kind() != reflect.Ptr {
+		eventbus.Publish(r.topic, fsm.Event{Type: flow.TaskExecuteErrorEvent, Status: task.GetStatus(), Message: "task obj not ptr", Obj: task})
+		return fmt.Errorf("task %s obj not ptr", task.Name())
+	}
+
 	hooks := r.GetHooks()
 	if hook, ok := hooks[flow.WhenTaskTrigger]; ok {
 		if err := hook(r.ctx, r.Flow, task); err != nil {
 			r.logger.Errorf("run task trigger hook error: %s", err.Error())
+			eventbus.Publish(r.topic, fsm.Event{Type: flow.TaskExecuteErrorEvent, Status: task.GetStatus(), Message: err.Error(), Obj: task})
 			return err
 		}
 	}
+
 	go func() {
 		var (
 			currentTryTimes  = 0
 			defaultRetryTime = 3
 			err              error
 		)
-		ctx := flow.Context{
+		ctx := &flow.Context{
 			Context:  r.batchCtx.Context,
 			FlowId:   r.batchCtx.FlowId,
 			MaxRetry: &defaultRetryTime,

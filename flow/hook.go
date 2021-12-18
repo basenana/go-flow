@@ -19,4 +19,4 @@ const (
 	WhenTaskExecuteCancel  HookType = "TaskCancel"
 )
 
-type Hook func(ctx Context, f Flow, t Task) error
+type Hook func(ctx *Context, f Flow, t Task) error

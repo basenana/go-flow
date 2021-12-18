@@ -10,10 +10,4 @@ const (
 	FailedStatus                  = "failed"
 	PausedStatus                  = "paused"
 	CanceledStatus                = "canceled"
-
-	PendingStatus          = "pending"
-	TaskInitializingStatus = "taskInitializing"
-	TaskRunningStatus      = "taskRunning"
-	TaskSucceedStatus      = "taskSucceed"
-	TaskFailedStatus       = "taskFailed"
 )

@@ -41,7 +41,7 @@ func (c *FlowController) TriggerFlow(ctx context.Context, flowId flow.FID) error
 		return fmt.Errorf("flow %s not found", flowId)
 	}
 
-	return r.start(flow.Context{
+	return r.start(&flow.Context{
 		Context: ctx,
 		FlowId:  flowId,
 	})
@@ -99,6 +99,20 @@ func (c *FlowController) ResumeFlow(flowId flow.FID) error {
 	default:
 		return fmt.Errorf("flow current is %s, can not resume", r.GetStatus())
 	}
+}
+
+func (c *FlowController) CleanFlow(flowId flow.FID) error {
+	r, ok := c.flows[flowId]
+	if !ok {
+		return fmt.Errorf("flow %s not found", flowId)
+	}
+	switch r.GetStatus() {
+	case flow.SucceedStatus, flow.FailedStatus, flow.CanceledStatus:
+		delete(c.flows, flowId)
+	default:
+		return fmt.Errorf("flow current is %s, can not clean", r.GetStatus())
+	}
+	return nil
 }
 
 func NewFlowController(opt Option) *FlowController {
