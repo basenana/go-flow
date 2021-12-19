@@ -14,8 +14,8 @@ import (
 
 type FlowController struct {
 	flows   map[flow.FID]*runner
-	Storage storage.Interface
-	Logger  log.Logger
+	storage storage.Interface
+	logger  log.Logger
 }
 
 func (c *FlowController) NewFlow(builder ext.FlowBuilder) (flow.Flow, error) {
@@ -24,23 +24,23 @@ func (c *FlowController) NewFlow(builder ext.FlowBuilder) (flow.Flow, error) {
 		return nil, fmt.Errorf("flow object must be ptr")
 	}
 
-	c.Logger.Infof("Build flow %s", f.ID())
+	c.logger.Infof("build flow %s", f.ID())
 	f.SetStatus(flow.CreatingStatus)
 	c.flows[f.ID()] = &runner{
 		Flow:   f,
 		stopCh: make(chan struct{}),
-		logger: c.Logger,
+		logger: c.logger.With(fmt.Sprintf("flow.%s", f.ID())),
 	}
 	return f, nil
 }
 
 func (c *FlowController) TriggerFlow(ctx context.Context, flowId flow.FID) error {
-	c.Logger.Infof("Trigger flow %s", flowId)
 	r, ok := c.flows[flowId]
 	if !ok {
 		return fmt.Errorf("flow %s not found", flowId)
 	}
 
+	c.logger.Infof("trigger flow %s", flowId)
 	return r.start(&flow.Context{
 		Context: ctx,
 		FlowId:  flowId,
@@ -48,12 +48,12 @@ func (c *FlowController) TriggerFlow(ctx context.Context, flowId flow.FID) error
 }
 
 func (c *FlowController) PauseFlow(flowId flow.FID) error {
-	c.Logger.Infof("Pause flow %s", flowId)
 	r, ok := c.flows[flowId]
 	if !ok {
 		return fmt.Errorf("flow %s not found", flowId)
 	}
 	if r.GetStatus() == flow.RunningStatus {
+		c.logger.Infof("pause flow %s", flowId)
 		eventbus.Publish(flow.EventTopic(flowId), fsm.Event{
 			Type:   flow.ExecutePauseEvent,
 			Status: r.GetStatus(),
@@ -64,13 +64,13 @@ func (c *FlowController) PauseFlow(flowId flow.FID) error {
 }
 
 func (c *FlowController) CancelFlow(flowId flow.FID) error {
-	c.Logger.Infof("Cancel flow %s", flowId)
 	r, ok := c.flows[flowId]
 	if !ok {
 		return fmt.Errorf("flow %s not found", flowId)
 	}
 	switch r.GetStatus() {
 	case flow.RunningStatus, flow.PausedStatus:
+		c.logger.Infof("cancel flow %s", flowId)
 		eventbus.Publish(flow.EventTopic(flowId), fsm.Event{
 			Type:   flow.ExecuteCancelEvent,
 			Status: r.GetStatus(),
@@ -83,13 +83,13 @@ func (c *FlowController) CancelFlow(flowId flow.FID) error {
 }
 
 func (c *FlowController) ResumeFlow(flowId flow.FID) error {
-	c.Logger.Infof("Resume flow %s", flowId)
 	r, ok := c.flows[flowId]
 	if !ok {
 		return fmt.Errorf("flow %s not found", flowId)
 	}
 	switch r.GetStatus() {
 	case flow.PausedStatus:
+		c.logger.Infof("resume flow %s", flowId)
 		eventbus.Publish(flow.EventTopic(flowId), fsm.Event{
 			Type:   flow.ExecuteResumeEvent,
 			Status: r.GetStatus(),
@@ -108,6 +108,7 @@ func (c *FlowController) CleanFlow(flowId flow.FID) error {
 	}
 	switch r.GetStatus() {
 	case flow.SucceedStatus, flow.FailedStatus, flow.CanceledStatus:
+		c.logger.Infof("clean flow %s", flowId)
 		delete(c.flows, flowId)
 	default:
 		return fmt.Errorf("flow current is %s, can not clean", r.GetStatus())
@@ -117,8 +118,8 @@ func (c *FlowController) CleanFlow(flowId flow.FID) error {
 
 func NewFlowController(opt Option) *FlowController {
 	return &FlowController{
-		Storage: opt.Storage,
-		Logger:  opt.Logger,
 		flows:   make(map[flow.FID]*runner),
+		storage: opt.Storage,
+		logger:  log.NewLogger("go-flow"),
 	}
 }

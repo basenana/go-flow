@@ -9,5 +9,6 @@ type Option struct {
 	Name   string
 	Obj    Stateful
 	Topic  eventbus.Topic
+	Filter func(event Event) bool
 	Logger log.Logger
 }

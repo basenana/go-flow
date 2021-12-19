@@ -65,9 +65,9 @@ func (b *eventbus) unregister(ID string) {
 
 func (b *eventbus) publish(t Topic, obj interface{}, args ...interface{}) {
 	b.mux.RLock()
-	defer b.mux.RUnlock()
-
 	l := b.registry[t]
+	b.mux.RUnlock()
+
 	for l != nil {
 		l.do(obj, args...)
 		l = l.next

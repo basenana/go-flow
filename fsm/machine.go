@@ -24,9 +24,10 @@ type edgeBuilder struct {
 }
 
 type FSM struct {
-	name  string
-	obj   Stateful
-	graph map[EventType]*edge
+	name        string
+	obj         Stateful
+	graph       map[EventType]*edge
+	eventFilter func(event Event) bool
 
 	crtBuilder *edgeBuilder
 	mux        sync.Mutex
@@ -135,6 +136,11 @@ func (m *FSM) eventHandler(obj interface{}, args ...interface{}) (err error) {
 		return
 	}
 
+	if m.eventFilter != nil && !m.eventFilter(event) {
+		return nil
+	}
+
+	m.logger.Debugf("handler fsm event: %s", event.Type)
 	head := m.graph[event.Type]
 	if head == nil {
 		return nil
@@ -148,6 +154,7 @@ func (m *FSM) eventHandler(obj interface{}, args ...interface{}) (err error) {
 
 	for head != nil {
 		if m.obj.GetStatus() == head.from {
+			m.logger.Debugf("change obj status from %s to %s with event: %s", head.from, head.to, event.Type)
 			m.obj.SetStatus(head.to)
 			if event.Message != "" {
 				m.obj.SetMessage(event.Message)
@@ -162,6 +169,7 @@ func (m *FSM) eventHandler(obj interface{}, args ...interface{}) (err error) {
 					Obj:     event.Obj,
 				}:
 				default:
+					m.logger.Warnf("event ch blocked, notify event lost")
 				}
 			}
 			return head.do(event)
@@ -173,11 +181,12 @@ func (m *FSM) eventHandler(obj interface{}, args ...interface{}) (err error) {
 
 func New(option Option) *FSM {
 	f := &FSM{
-		name:     fmt.Sprintf("%s.%s", option.Name, uuid.New().String()),
-		obj:      option.Obj,
-		graph:    map[EventType]*edge{},
-		logger:   option.Logger,
-		eventChs: make([]chan Event, 0),
+		name:        fmt.Sprintf("%s.%s", option.Name, uuid.New().String()),
+		obj:         option.Obj,
+		graph:       map[EventType]*edge{},
+		eventFilter: option.Filter,
+		logger:      option.Logger,
+		eventChs:    make([]chan Event, 0),
 	}
 	eventbus.Register(option.Topic, eventbus.NewSimpleListener(f.name, f.eventHandler))
 	return f

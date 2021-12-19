@@ -2,17 +2,24 @@ package flow
 
 import (
 	"context"
+	"github.com/zwwhdls/go-flow/log"
 )
 
 type Context struct {
 	context.Context
-	FlowId   FID
-	MaxRetry *int
+	log.Logger
+
+	FlowId    FID
+	Message   string
+	MaxRetry  int
+	IsSucceed bool
 }
 
 func (c *Context) Succeed() {
+	c.IsSucceed = true
 }
 
-func (c *Context) Fail(MaxRetry int) {
-	c.MaxRetry = &MaxRetry
+func (c *Context) Fail(message string, maxRetry int) {
+	c.Message = message
+	c.MaxRetry = maxRetry
 }

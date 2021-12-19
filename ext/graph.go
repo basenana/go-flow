@@ -137,5 +137,9 @@ func (t *TaskDep) Lists() (result [][]flow.TName, err error) {
 }
 
 func NewTaskDep() *TaskDep {
-	return &TaskDep{}
+	return &TaskDep{
+		taskSet:   NewTaskNameSet(),
+		taskEdges: map[flow.TName][]flow.TName{},
+		preCount:  map[flow.TName]int{},
+	}
 }
