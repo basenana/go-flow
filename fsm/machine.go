@@ -9,48 +9,48 @@ import (
 )
 
 type edge struct {
-	from string
-	to   string
-	when eventbus.Topic
+	from Status
+	to   Status
+	when EventType
 	do   Handler
 	next *edge
 }
 
 type edgeBuilder struct {
-	from []string
-	to   string
-	when eventbus.Topic
+	from []Status
+	to   Status
+	when EventType
 	do   Handler
 }
 
 type FSM struct {
-	name      string
-	obj       Stateful
-	graph     map[eventbus.Topic]*edge
-	listeners []string
+	name        string
+	obj         Stateful
+	graph       map[EventType]*edge
+	eventFilter func(event Event) bool
 
 	crtBuilder *edgeBuilder
 	mux        sync.Mutex
 	logger     log.Logger
 
-	statusChs []chan string
+	eventChs []chan Event
 }
 
-func (m *FSM) From(statues []string) *FSM {
+func (m *FSM) From(statues []Status) *FSM {
 	m.buildWarp(func(builder *edgeBuilder) {
 		builder.from = statues
 	})
 	return m
 }
 
-func (m *FSM) To(status string) *FSM {
+func (m *FSM) To(status Status) *FSM {
 	m.buildWarp(func(builder *edgeBuilder) {
 		builder.to = status
 	})
 	return m
 }
 
-func (m *FSM) When(event eventbus.Topic) *FSM {
+func (m *FSM) When(event EventType) *FSM {
 	m.buildWarp(func(builder *edgeBuilder) {
 		builder.when = event
 	})
@@ -64,18 +64,22 @@ func (m *FSM) Do(handler Handler) *FSM {
 	return m
 }
 
-func (m *FSM) RegisterStatusCh(ch chan string) {
-	m.statusChs = append(m.statusChs, ch)
+func (m *FSM) RegisterStatusCh(ch chan Event) {
+	m.eventChs = append(m.eventChs, ch)
+}
+
+func (m *FSM) EventCh() chan Event {
+	mergeCh := make(chan Event, 8)
+	m.eventChs = append(m.eventChs, mergeCh)
+	return mergeCh
 }
 
 func (m *FSM) Close() error {
 	m.mux.Lock()
 	defer m.mux.Unlock()
 
-	for _, lID := range m.listeners {
-		eventbus.Unregister(lID)
-	}
-	for _, ch := range m.statusChs {
+	eventbus.Unregister(m.name)
+	for _, ch := range m.eventChs {
 		close(ch)
 	}
 	return nil
@@ -109,7 +113,6 @@ func (m *FSM) buildWarp(f func(builder *edgeBuilder)) {
 	m.crtBuilder = nil
 
 	head := m.graph[builder.when]
-
 	for _, from := range builder.from {
 		newEdge := &edge{
 			from: from,
@@ -120,20 +123,25 @@ func (m *FSM) buildWarp(f func(builder *edgeBuilder)) {
 		}
 		head = newEdge
 		m.graph[builder.when] = newEdge
-
-		lID := fmt.Sprintf("fsm.%s.%s", m.name, newEdge.when)
-		eventbus.Register(builder.when, eventbus.NewBlockListener(lID, func(args ...interface{}) error {
-			return m.eventHandle(newEdge.when, args...)
-		}))
-		m.listeners = append(m.listeners, lID)
 	}
 }
 
-func (m *FSM) eventHandle(event eventbus.Topic, args ...interface{}) (err error) {
+func (m *FSM) eventHandler(obj interface{}, args ...interface{}) (err error) {
 	m.mux.Lock()
 	defer m.mux.Unlock()
 
-	head := m.graph[event]
+	event, ok := obj.(Event)
+	if !ok {
+		err = fmt.Errorf("not got event object")
+		return
+	}
+
+	if m.eventFilter != nil && !m.eventFilter(event) {
+		return nil
+	}
+
+	m.logger.Debugf("handler fsm event: %s", event.Type)
+	head := m.graph[event.Type]
 	if head == nil {
 		return nil
 	}
@@ -146,16 +154,25 @@ func (m *FSM) eventHandle(event eventbus.Topic, args ...interface{}) (err error)
 
 	for head != nil {
 		if m.obj.GetStatus() == head.from {
-			if err := m.obj.SetStatus(head.to); err != nil {
-				return err
+			m.logger.Debugf("change obj status from %s to %s with event: %s", head.from, head.to, event.Type)
+			m.obj.SetStatus(head.to)
+			if event.Message != "" {
+				m.obj.SetMessage(event.Message)
 			}
-			for _, ch := range m.statusChs {
+
+			for _, ch := range m.eventChs {
 				select {
-				case ch <- head.to:
+				case ch <- Event{
+					Type:    event.Type,
+					Status:  m.obj.GetStatus(),
+					Message: event.Message,
+					Obj:     event.Obj,
+				}:
 				default:
+					m.logger.Warnf("event ch blocked, notify event lost")
 				}
 			}
-			return head.do(args...)
+			return head.do(event)
 		}
 		head = head.next
 	}
@@ -163,11 +180,14 @@ func (m *FSM) eventHandle(event eventbus.Topic, args ...interface{}) (err error)
 }
 
 func New(option Option) *FSM {
-	return &FSM{
-		name:      fmt.Sprintf("%s.%s", option.Name, uuid.New().String()),
-		obj:       option.Obj,
-		graph:     map[eventbus.Topic]*edge{},
-		logger:    option.Logger,
-		statusChs: make([]chan string, 0),
+	f := &FSM{
+		name:        fmt.Sprintf("%s.%s", option.Name, uuid.New().String()),
+		obj:         option.Obj,
+		graph:       map[EventType]*edge{},
+		eventFilter: option.Filter,
+		logger:      option.Logger,
+		eventChs:    make([]chan Event, 0),
 	}
+	eventbus.Register(option.Topic, eventbus.NewSimpleListener(f.name, f.eventHandler))
+	return f
 }

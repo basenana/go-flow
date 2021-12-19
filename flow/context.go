@@ -2,24 +2,24 @@ package flow
 
 import (
 	"context"
-	"github.com/zwwhdls/go-flow/eventbus"
-	"sync"
+	"github.com/zwwhdls/go-flow/log"
 )
 
 type Context struct {
-	sync.Mutex
 	context.Context
-	FlowId   FID
-	TaskName TName
-	MaxRetry int
-	Retry    int
+	log.Logger
+
+	FlowId    FID
+	Message   string
+	MaxRetry  int
+	IsSucceed bool
 }
 
 func (c *Context) Succeed() {
-	eventbus.Publish(GetTaskTopic(TaskExecuteSucceedEventTopicTpl, c.FlowId, c.TaskName))
+	c.IsSucceed = true
 }
 
-func (c *Context) Fail(MaxRetry int) {
-	c.MaxRetry = MaxRetry
-	eventbus.Publish(GetTaskTopic(TaskExecuteFailedEventTopicTpl, c.FlowId, c.TaskName))
+func (c *Context) Fail(message string, maxRetry int) {
+	c.Message = message
+	c.MaxRetry = maxRetry
 }

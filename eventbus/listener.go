@@ -1,6 +1,6 @@
 package eventbus
 
-type hook func(args ...interface{}) error
+type hook func(obj interface{}, args ...interface{}) error
 type errHandle func(ID string, topic Topic, err error)
 
 type listener struct {
@@ -12,9 +12,9 @@ type listener struct {
 	next      *listener
 }
 
-func (l *listener) do(args ...interface{}) {
+func (l *listener) do(obj interface{}, args ...interface{}) {
 	f := func() {
-		if err := l.Fn(args...); err != nil {
+		if err := l.Fn(obj, args...); err != nil {
 			if l.ErrHandle != nil {
 				l.ErrHandle(l.ID, l.Topic, err)
 				return
