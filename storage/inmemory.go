@@ -1,0 +1,70 @@
+package storage
+
+import (
+	"fmt"
+	"github.com/zwwhdls/go-flow/flow"
+	"sync"
+)
+
+const (
+	flowKeyTpl = "storage.flow.%s"
+	taskKeyTpl = "storage.flow.%s.task.%s"
+)
+
+var ErrNotFound = fmt.Errorf("not found")
+
+type MemStorage struct {
+	sync.Map
+}
+
+func (m *MemStorage) GetFlow(flowId flow.FID) (flow.Flow, error) {
+	k := fmt.Sprintf(flowKeyTpl, flowId)
+	obj, ok := m.Load(k)
+	if !ok {
+		return nil, ErrNotFound
+	}
+	return obj.(flow.Flow), nil
+}
+
+func (m *MemStorage) SaveFlow(flow flow.Flow) error {
+	k := fmt.Sprintf(flowKeyTpl, flow.ID())
+	m.Store(k, flow)
+	return nil
+}
+
+func (m *MemStorage) DeleteFlow(flowId flow.FID) (flow.Flow, error) {
+	k := fmt.Sprintf(flowKeyTpl, flowId)
+	obj, ok := m.LoadAndDelete(k)
+	if !ok {
+		return nil, ErrNotFound
+	}
+	return obj.(flow.Flow), nil
+}
+
+func (m *MemStorage) GetTask(flowId flow.FID, taskName flow.TName) (flow.Task, error) {
+	k := fmt.Sprintf(taskKeyTpl, flowId, taskName)
+	obj, ok := m.Load(k)
+	if !ok {
+		return nil, ErrNotFound
+	}
+	return obj.(flow.Task), nil
+}
+
+func (m *MemStorage) SaveTask(flowId flow.FID, task flow.Task) error {
+	k := fmt.Sprintf(taskKeyTpl, flowId, task.Name())
+	m.Store(k, task)
+	return nil
+}
+
+func (m *MemStorage) DeleteTask(flowId flow.FID, taskName flow.TName) (flow.Task, error) {
+	k := fmt.Sprintf(taskKeyTpl, flowId, taskName)
+	obj, ok := m.LoadAndDelete(k)
+	if !ok {
+		return nil, ErrNotFound
+	}
+	return obj.(flow.Task), nil
+}
+
+func NewInMemoryStorage() Interface {
+	return &MemStorage{}
+}

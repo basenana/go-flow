@@ -6,6 +6,7 @@ import (
 	"github.com/zwwhdls/go-flow/ext"
 	"github.com/zwwhdls/go-flow/flow"
 	"github.com/zwwhdls/go-flow/fsm"
+	"github.com/zwwhdls/go-flow/storage"
 	"math/rand"
 	"testing"
 	"time"
@@ -17,7 +18,7 @@ import (
 var controller *FlowController
 
 func init() {
-	controller = NewFlowController(Option{})
+	controller, _ = NewFlowController(Option{Storage: storage.NewInMemoryStorage()})
 }
 
 func TestController(t *testing.T) {
@@ -65,13 +66,16 @@ func (f ChaosFlow) GetHooks() flow.Hooks {
 func (f ChaosFlow) Setup(ctx *flow.Context) error {
 	f.doIdle()
 	if f.chaos.FlowSetupErr != nil {
+		ctx.Fail(f.chaos.FlowSetupErr.Error(), 3)
 		return f.chaos.FlowSetupErr
 	}
+	ctx.Succeed()
 	return nil
 }
 
 func (f ChaosFlow) Teardown(ctx *flow.Context) {
 	f.doIdle()
+	ctx.Succeed()
 	return
 }
 
@@ -87,21 +91,29 @@ func (f *ChaosFlow) NextBatch(ctx *flow.Context) ([]flow.Task, error) {
 
 	batchTasks := make([]flow.Task, f.parallel)
 	for i := 0; i < f.parallel; i++ {
-		crtCtn := f.taskCount
+		crtCtn := f.taskCount + 1
 		batchTasks[i] = ext.BuildSampleTask(fmt.Sprintf("task-%d", crtCtn), ext.TaskSpec{
 			Setup: func(ctx *flow.Context) error {
 				f.doIdle()
-				return f.chaos.TaskSetupErr
+				if f.chaos.FailTaskIdx == crtCtn && f.chaos.TaskSetupErr != nil {
+					ctx.Fail(f.chaos.TaskSetupErr.Error(), 3)
+					return f.chaos.TaskSetupErr
+				}
+				ctx.Succeed()
+				return nil
 			},
 			Do: func(ctx *flow.Context) error {
 				f.doIdle()
 				if f.chaos.FailTaskIdx > 0 && f.chaos.FailTaskIdx == crtCtn {
+					ctx.Fail(f.chaos.TaskErr.Error(), 3)
 					return f.chaos.TaskErr
 				}
+				ctx.Succeed()
 				return nil
 			},
 			Teardown: func(ctx *flow.Context) {
 				f.doIdle()
+				ctx.Succeed()
 			},
 		})
 		f.taskCount += 1

@@ -154,7 +154,7 @@ func (m *FSM) eventHandler(obj interface{}, args ...interface{}) (err error) {
 
 	for head != nil {
 		if m.obj.GetStatus() == head.from {
-			m.logger.Debugf("change obj status from %s to %s with event: %s", head.from, head.to, event.Type)
+			m.logger.Infof("change obj status from %s to %s with event: %s", head.from, head.to, event.Type)
 			m.obj.SetStatus(head.to)
 			if event.Message != "" {
 				m.obj.SetMessage(event.Message)
@@ -172,10 +172,16 @@ func (m *FSM) eventHandler(obj interface{}, args ...interface{}) (err error) {
 					m.logger.Warnf("event ch blocked, notify event lost")
 				}
 			}
-			return head.do(event)
+			go func() {
+				if handleErr := head.do(event); handleErr != nil {
+					m.logger.Errorf("event %s handle failed: %s", event.Type, handleErr.Error())
+				}
+			}()
+			return nil
 		}
 		head = head.next
 	}
+	m.logger.Infof("get event %s and current status is %s, no change rule matched", event.Type, m.obj.GetStatus())
 	return nil
 }
 

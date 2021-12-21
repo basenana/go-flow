@@ -41,6 +41,7 @@ const (
 	RunningStatus                 = "running"
 	SucceedStatus                 = "succeed"
 	FailedStatus                  = "failed"
+	ErrorStatus                   = "error"
 	PausedStatus                  = "paused"
 	CanceledStatus                = "canceled"
 
