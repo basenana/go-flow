@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"github.com/zwwhdls/go-flow/eventbus"
 	"github.com/zwwhdls/go-flow/ext"
 	"github.com/zwwhdls/go-flow/flow"
 	"github.com/zwwhdls/go-flow/fsm"
@@ -42,7 +41,7 @@ func (c *FlowController) TriggerFlow(ctx context.Context, flowId flow.FID) error
 	}
 
 	c.logger.Infof("trigger flow %s", flowId)
-	return r.start(&flow.Context{
+	return r.Start(&flow.Context{
 		Context: ctx,
 		Logger:  c.logger.With(fmt.Sprintf("flow.%s", flowId)),
 		FlowId:  flowId,
@@ -56,12 +55,11 @@ func (c *FlowController) PauseFlow(flowId flow.FID) error {
 	}
 	if r.GetStatus() == flow.RunningStatus {
 		c.logger.Infof("pause flow %s", flowId)
-		eventbus.Publish(flow.EventTopic(flowId), fsm.Event{
+		return r.Pause(fsm.Event{
 			Type:   flow.ExecutePauseEvent,
 			Status: r.GetStatus(),
 			Obj:    r.Flow,
 		})
-		return nil
 	}
 	return fmt.Errorf("flow current is %s, can not pause", r.GetStatus())
 }
@@ -74,12 +72,12 @@ func (c *FlowController) CancelFlow(flowId flow.FID) error {
 	switch r.GetStatus() {
 	case flow.RunningStatus, flow.PausedStatus:
 		c.logger.Infof("cancel flow %s", flowId)
-		eventbus.Publish(r.topic, fsm.Event{
-			Type:   flow.ExecuteCancelEvent,
-			Status: r.GetStatus(),
-			Obj:    r.Flow,
+		return r.Cancel(fsm.Event{
+			Type:    flow.ExecuteCancelEvent,
+			Status:  r.GetStatus(),
+			Message: "canceled",
+			Obj:     r.Flow,
 		})
-		return nil
 	default:
 		return fmt.Errorf("flow current is %s, can not cancel", r.GetStatus())
 	}
@@ -93,12 +91,11 @@ func (c *FlowController) ResumeFlow(flowId flow.FID) error {
 	switch r.GetStatus() {
 	case flow.PausedStatus:
 		c.logger.Infof("resume flow %s", flowId)
-		eventbus.Publish(flow.EventTopic(flowId), fsm.Event{
+		return r.Resume(fsm.Event{
 			Type:   flow.ExecuteResumeEvent,
 			Status: r.GetStatus(),
 			Obj:    r.Flow,
 		})
-		return nil
 	default:
 		return fmt.Errorf("flow current is %s, can not resume", r.GetStatus())
 	}

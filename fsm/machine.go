@@ -2,8 +2,6 @@ package fsm
 
 import (
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/zwwhdls/go-flow/eventbus"
 	"github.com/zwwhdls/go-flow/log"
 	"sync"
 )
@@ -24,16 +22,12 @@ type edgeBuilder struct {
 }
 
 type FSM struct {
-	name        string
-	obj         Stateful
-	graph       map[EventType]*edge
-	eventFilter func(event Event) bool
+	obj   Stateful
+	graph map[EventType]*edge
 
 	crtBuilder *edgeBuilder
 	mux        sync.Mutex
 	logger     log.Logger
-
-	eventChs []chan Event
 }
 
 func (m *FSM) From(statues []Status) *FSM {
@@ -64,25 +58,41 @@ func (m *FSM) Do(handler Handler) *FSM {
 	return m
 }
 
-func (m *FSM) RegisterStatusCh(ch chan Event) {
-	m.eventChs = append(m.eventChs, ch)
-}
-
-func (m *FSM) EventCh() chan Event {
-	mergeCh := make(chan Event, 8)
-	m.eventChs = append(m.eventChs, mergeCh)
-	return mergeCh
-}
-
-func (m *FSM) Close() error {
+func (m *FSM) Event(event Event) error {
 	m.mux.Lock()
 	defer m.mux.Unlock()
 
-	eventbus.Unregister(m.name)
-	for _, ch := range m.eventChs {
-		close(ch)
+	m.logger.Debugf("handler fsm event: %s", event.Type)
+	head := m.graph[event.Type]
+	if head == nil {
+		return nil
 	}
-	return nil
+
+	defer func() {
+		if panicErr := recover(); panicErr != nil {
+			m.logger.Errorf("event %s handle panic: %v", event, panicErr)
+		}
+	}()
+
+	for head != nil {
+		if m.obj.GetStatus() == head.from {
+			m.logger.Infof("change obj status from %s to %s with event: %s", head.from, head.to, event.Type)
+			m.obj.SetStatus(head.to)
+			if event.Message != "" {
+				m.obj.SetMessage(event.Message)
+			}
+
+			if head.do != nil {
+				if handleErr := head.do(event); handleErr != nil {
+					m.logger.Errorf("event %s handle failed: %s", event.Type, handleErr.Error())
+					return handleErr
+				}
+			}
+			return nil
+		}
+		head = head.next
+	}
+	return fmt.Errorf("get event %s and current status is %s, no change path matched", event.Type, m.obj.GetStatus())
 }
 
 func (m *FSM) buildWarp(f func(builder *edgeBuilder)) {
@@ -126,74 +136,11 @@ func (m *FSM) buildWarp(f func(builder *edgeBuilder)) {
 	}
 }
 
-func (m *FSM) eventHandler(obj interface{}, args ...interface{}) (err error) {
-	m.mux.Lock()
-	defer m.mux.Unlock()
-
-	event, ok := obj.(Event)
-	if !ok {
-		err = fmt.Errorf("not got event object")
-		return
-	}
-
-	if m.eventFilter != nil && !m.eventFilter(event) {
-		return nil
-	}
-
-	m.logger.Debugf("handler fsm event: %s", event.Type)
-	head := m.graph[event.Type]
-	if head == nil {
-		return nil
-	}
-
-	defer func() {
-		if panicErr := recover(); panicErr != nil {
-			err = fmt.Errorf("event %s handle panic: %v", event, panicErr)
-		}
-	}()
-
-	for head != nil {
-		if m.obj.GetStatus() == head.from {
-			m.logger.Infof("change obj status from %s to %s with event: %s", head.from, head.to, event.Type)
-			m.obj.SetStatus(head.to)
-			if event.Message != "" {
-				m.obj.SetMessage(event.Message)
-			}
-
-			for _, ch := range m.eventChs {
-				select {
-				case ch <- Event{
-					Type:    event.Type,
-					Status:  m.obj.GetStatus(),
-					Message: event.Message,
-					Obj:     event.Obj,
-				}:
-				default:
-					m.logger.Warnf("event ch blocked, notify event lost")
-				}
-			}
-			go func() {
-				if handleErr := head.do(event); handleErr != nil {
-					m.logger.Errorf("event %s handle failed: %s", event.Type, handleErr.Error())
-				}
-			}()
-			return nil
-		}
-		head = head.next
-	}
-	m.logger.Infof("get event %s and current status is %s, no change rule matched", event.Type, m.obj.GetStatus())
-	return nil
-}
-
 func New(option Option) *FSM {
 	f := &FSM{
-		name:        fmt.Sprintf("%s.%s", option.Name, uuid.New().String()),
-		obj:         option.Obj,
-		graph:       map[EventType]*edge{},
-		eventFilter: option.Filter,
-		logger:      option.Logger,
-		eventChs:    make([]chan Event, 0),
+		obj:    option.Obj,
+		graph:  map[EventType]*edge{},
+		logger: option.Logger,
 	}
-	eventbus.Register(option.Topic, eventbus.NewSimpleListener(f.name, f.eventHandler))
 	return f
 }

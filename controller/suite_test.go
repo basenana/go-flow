@@ -3,6 +3,7 @@ package controller
 import (
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/onsi/ginkgo/config"
 	"github.com/zwwhdls/go-flow/ext"
 	"github.com/zwwhdls/go-flow/flow"
 	"github.com/zwwhdls/go-flow/fsm"
@@ -22,6 +23,8 @@ func init() {
 }
 
 func TestController(t *testing.T) {
+	config.DefaultReporterConfig.SlowSpecThreshold = time.Hour.Seconds()
+
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Controller Suite")
 }
