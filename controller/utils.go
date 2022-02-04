@@ -1,47 +1,36 @@
 package controller
 
 import (
-	"fmt"
-	"github.com/google/uuid"
-	"github.com/zwwhdls/go-flow/eventbus"
+	"bytes"
 	"github.com/zwwhdls/go-flow/flow"
 	"github.com/zwwhdls/go-flow/fsm"
 )
 
-func waitTaskRunningOrClose(topic eventbus.Topic, task flow.Task) fsm.Status {
-	if task.GetStatus() == flow.RunningStatus {
-		return flow.RunningStatus
+type Errors []error
+
+func (e Errors) Error() string {
+	buf := bytes.Buffer{}
+	for _, oneE := range e {
+		buf.WriteString(oneE.Error())
+		buf.WriteString(" ")
 	}
 
-	var (
-		waitTask = make(chan struct{})
-		lID      = fmt.Sprintf("wait-task-%s-running-%s", task.Name(), uuid.New().String())
-	)
-	eventbus.Register(topic, eventbus.NewBlockListener(lID, func(obj interface{}, args ...interface{}) error {
-		evt, ok := obj.(fsm.Event)
-		if !ok {
-			return fmt.Errorf("topic %s get non-event obj", topic)
-		}
+	return buf.String()
+}
 
-		if !flow.IsTaskEvent(evt.Type) {
-			return nil
-		}
+func (e Errors) IsError() bool {
+	return len(e) > 0
+}
 
-		t := evt.Obj.(flow.Task)
-		if t.Name() != task.Name() {
-			return nil
-		}
+func NewErrors() Errors {
+	return []error{}
+}
 
-		switch evt.Type {
-		case flow.TaskTriggerEvent, flow.TaskExecutePauseEvent:
-			return nil
-		default:
-			close(waitTask)
-		}
-
-		return nil
-	}))
-	<-waitTask
-	eventbus.Unregister(lID)
-	return task.GetStatus()
+func IsFinishedStatus(sts fsm.Status) bool {
+	switch sts {
+	case flow.SucceedStatus, flow.FailedStatus, flow.CanceledStatus:
+		return true
+	default:
+		return false
+	}
 }

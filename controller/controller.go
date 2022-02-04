@@ -3,13 +3,10 @@ package controller
 import (
 	"context"
 	"fmt"
-	"github.com/zwwhdls/go-flow/eventbus"
-	"github.com/zwwhdls/go-flow/ext"
 	"github.com/zwwhdls/go-flow/flow"
 	"github.com/zwwhdls/go-flow/fsm"
 	"github.com/zwwhdls/go-flow/log"
 	"github.com/zwwhdls/go-flow/storage"
-	"reflect"
 )
 
 type FlowController struct {
@@ -18,31 +15,22 @@ type FlowController struct {
 	logger  log.Logger
 }
 
-func (c *FlowController) NewFlow(builder ext.FlowBuilder) (flow.Flow, error) {
-	f := builder.Build()
-	if reflect.ValueOf(f).Type().Kind() != reflect.Ptr {
-		return nil, fmt.Errorf("flow object must be ptr")
+func (c *FlowController) TriggerFlow(ctx context.Context, flowId flow.FID) error {
+	f, err := c.storage.GetFlow(flowId)
+	if err != nil {
+		return err
 	}
 
-	c.logger.Infof("build flow %s", f.ID())
-	f.SetStatus(flow.CreatingStatus)
-	c.flows[f.ID()] = &runner{
+	r := &runner{
 		Flow:    f,
 		stopCh:  make(chan struct{}),
 		storage: c.storage,
 		logger:  c.logger.With(fmt.Sprintf("flow.%s", f.ID())),
 	}
-	return f, nil
-}
-
-func (c *FlowController) TriggerFlow(ctx context.Context, flowId flow.FID) error {
-	r, ok := c.flows[flowId]
-	if !ok {
-		return fmt.Errorf("flow %s not found", flowId)
-	}
+	c.flows[f.ID()] = r
 
 	c.logger.Infof("trigger flow %s", flowId)
-	return r.start(&flow.Context{
+	return r.Start(&flow.Context{
 		Context: ctx,
 		Logger:  c.logger.With(fmt.Sprintf("flow.%s", flowId)),
 		FlowId:  flowId,
@@ -56,12 +44,11 @@ func (c *FlowController) PauseFlow(flowId flow.FID) error {
 	}
 	if r.GetStatus() == flow.RunningStatus {
 		c.logger.Infof("pause flow %s", flowId)
-		eventbus.Publish(flow.EventTopic(flowId), fsm.Event{
+		return r.Pause(fsm.Event{
 			Type:   flow.ExecutePauseEvent,
 			Status: r.GetStatus(),
 			Obj:    r.Flow,
 		})
-		return nil
 	}
 	return fmt.Errorf("flow current is %s, can not pause", r.GetStatus())
 }
@@ -74,12 +61,12 @@ func (c *FlowController) CancelFlow(flowId flow.FID) error {
 	switch r.GetStatus() {
 	case flow.RunningStatus, flow.PausedStatus:
 		c.logger.Infof("cancel flow %s", flowId)
-		eventbus.Publish(r.topic, fsm.Event{
-			Type:   flow.ExecuteCancelEvent,
-			Status: r.GetStatus(),
-			Obj:    r.Flow,
+		return r.Cancel(fsm.Event{
+			Type:    flow.ExecuteCancelEvent,
+			Status:  r.GetStatus(),
+			Message: "canceled",
+			Obj:     r.Flow,
 		})
-		return nil
 	default:
 		return fmt.Errorf("flow current is %s, can not cancel", r.GetStatus())
 	}
@@ -93,12 +80,11 @@ func (c *FlowController) ResumeFlow(flowId flow.FID) error {
 	switch r.GetStatus() {
 	case flow.PausedStatus:
 		c.logger.Infof("resume flow %s", flowId)
-		eventbus.Publish(flow.EventTopic(flowId), fsm.Event{
+		return r.Resume(fsm.Event{
 			Type:   flow.ExecuteResumeEvent,
 			Status: r.GetStatus(),
 			Obj:    r.Flow,
 		})
-		return nil
 	default:
 		return fmt.Errorf("flow current is %s, can not resume", r.GetStatus())
 	}

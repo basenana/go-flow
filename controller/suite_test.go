@@ -3,6 +3,7 @@ package controller
 import (
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/onsi/ginkgo/config"
 	"github.com/zwwhdls/go-flow/ext"
 	"github.com/zwwhdls/go-flow/flow"
 	"github.com/zwwhdls/go-flow/fsm"
@@ -15,13 +16,19 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var controller *FlowController
+var (
+	controller  *FlowController
+	flowStorage storage.Interface
+)
 
 func init() {
-	controller, _ = NewFlowController(Option{Storage: storage.NewInMemoryStorage()})
+	flowStorage = storage.NewInMemoryStorage()
+	controller, _ = NewFlowController(Option{Storage: flowStorage})
 }
 
 func TestController(t *testing.T) {
+	config.DefaultReporterConfig.SlowSpecThreshold = time.Hour.Seconds()
+
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Controller Suite")
 }
