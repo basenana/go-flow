@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/zwwhdls/go-flow/flow"
+	"github.com/zwwhdls/go-flow/storage"
 )
 
 type GraphFlow struct {
@@ -14,6 +15,10 @@ type GraphFlow struct {
 }
 
 var _ flow.Flow = &GraphFlow{}
+
+func (g GraphFlow) Type() flow.FType {
+	return "GraphFlow"
+}
 
 func (g GraphFlow) GetHooks() flow.Hooks {
 	return map[flow.HookType]flow.Hook{}
@@ -42,46 +47,31 @@ func (g GraphFlow) NextBatch(ctx *flow.Context) ([]flow.Task, error) {
 	return tasks, nil
 }
 
-type GraphFlowBuilder struct {
-	batches [][]flow.TName
-	tasks   []flow.Task
-	policy  flow.ControlPolicy
-}
-
-var _ FlowBuilder = &GraphFlowBuilder{}
-
-func (g GraphFlowBuilder) Build() flow.Flow {
-	tasks := make(map[flow.TName]flow.Task)
-	for i, t := range g.tasks {
-		tasks[t.Name()] = g.tasks[i]
-	}
-
-	return &GraphFlow{
-		basic: &basic{
-			id:     flow.FID(fmt.Sprintf("graph-flow-%s", uuid.New().String())),
-			status: flow.CreatingStatus,
-			policy: g.policy,
-		},
-		tasks:   tasks,
-		batches: g.batches,
-	}
-}
-
-func NewGraphFlowBuilder(tasks []flow.Task, dep *TaskDep, policy flow.ControlPolicy) (FlowBuilder, error) {
+func NewGraphFlow(s storage.Interface, tasks []flow.Task, dep *TaskDep, policy flow.ControlPolicy) error {
 	if dep == nil || dep.taskEdges == nil {
 		dep = NewTaskDep()
 	}
 
 	batches, err := dep.Lists()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return &GraphFlowBuilder{
+	taskMap := make(map[flow.TName]flow.Task)
+	for i, t := range tasks {
+		taskMap[t.Name()] = tasks[i]
+	}
+
+	f := &GraphFlow{
+		basic: &basic{
+			id:     flow.FID(fmt.Sprintf("graph-flow-%s", uuid.New().String())),
+			status: flow.CreatingStatus,
+			policy: policy,
+		},
+		tasks:   taskMap,
 		batches: batches,
-		tasks:   tasks,
-		policy:  policy,
-	}, nil
+	}
+	return s.SaveFlow(f)
 }
 
 type TaskDep struct {

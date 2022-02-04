@@ -2,17 +2,21 @@ package flow
 
 import (
 	"github.com/zwwhdls/go-flow/fsm"
+	"reflect"
 )
 
 type Flow interface {
 	fsm.Stateful
 	ID() FID
+	Type() FType
 	GetHooks() Hooks
 	Setup(ctx *Context) error
 	Teardown(ctx *Context)
 	NextBatch(ctx *Context) ([]Task, error)
 	GetControlPolicy() ControlPolicy
 }
+
+var FlowTypes = map[FType]reflect.Type{}
 
 type Task interface {
 	fsm.Stateful
@@ -28,6 +32,7 @@ type ControlPolicy struct {
 
 type (
 	FID          string
+	FType        string
 	TName        string
 	FailedPolicy string
 	HookType     string

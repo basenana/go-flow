@@ -183,7 +183,7 @@ func (r *runner) makeNextBatch() error {
 
 			oldTaskStatus, queryTaskErr := meta.QueryTaskStatus(task.Name())
 			if queryTaskErr != nil {
-				if queryTaskErr == storage.ErrNotFound {
+				if queryTaskErr == storage.NotFound {
 					// new task
 					newBatch = append(newBatch, runningTask{
 						Task: nextTasks[i],
