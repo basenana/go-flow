@@ -3,12 +3,10 @@ package controller
 import (
 	"context"
 	"fmt"
-	"github.com/zwwhdls/go-flow/ext"
 	"github.com/zwwhdls/go-flow/flow"
 	"github.com/zwwhdls/go-flow/fsm"
 	"github.com/zwwhdls/go-flow/log"
 	"github.com/zwwhdls/go-flow/storage"
-	"reflect"
 )
 
 type FlowController struct {
@@ -17,28 +15,19 @@ type FlowController struct {
 	logger  log.Logger
 }
 
-func (c *FlowController) NewFlow(builder ext.FlowBuilder) (flow.Flow, error) {
-	f := builder.Build()
-	if reflect.ValueOf(f).Type().Kind() != reflect.Ptr {
-		return nil, fmt.Errorf("flow object must be ptr")
+func (c *FlowController) TriggerFlow(ctx context.Context, flowId flow.FID) error {
+	f, err := c.storage.GetFlow(flowId)
+	if err != nil {
+		return err
 	}
 
-	c.logger.Infof("build flow %s", f.ID())
-	f.SetStatus(flow.CreatingStatus)
-	c.flows[f.ID()] = &runner{
+	r := &runner{
 		Flow:    f,
 		stopCh:  make(chan struct{}),
 		storage: c.storage,
 		logger:  c.logger.With(fmt.Sprintf("flow.%s", f.ID())),
 	}
-	return f, nil
-}
-
-func (c *FlowController) TriggerFlow(ctx context.Context, flowId flow.FID) error {
-	r, ok := c.flows[flowId]
-	if !ok {
-		return fmt.Errorf("flow %s not found", flowId)
-	}
+	c.flows[f.ID()] = r
 
 	c.logger.Infof("trigger flow %s", flowId)
 	return r.Start(&flow.Context{

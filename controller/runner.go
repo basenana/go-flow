@@ -120,29 +120,16 @@ func (r *runner) flowRun() error {
 			}
 
 			if !needRetry {
-				var nextTasks []flow.Task
-				nextTasks, err = r.NextBatch(r.ctx)
-				if err != nil {
-					r.logger.Errorf("got next batch error: %s", err.Error())
+				if err = r.makeNextBatch(); err != nil {
+					r.logger.Errorf("make next batch plan error: %s, stop flow.", err.Error())
 					_ = r.pushEvent2FlowFSM(fsm.Event{Type: flow.ExecuteErrorEvent, Status: r.GetStatus(), Message: err.Error(), Obj: r})
 					return
 				}
-
-				if len(nextTasks) == 0 {
-					r.logger.Info("got empty batch, close flow")
+				if len(r.batch) == 0 {
+					r.logger.Info("got empty batch, close finished flow")
 					_ = r.pushEvent2FlowFSM(fsm.Event{Type: flow.ExecuteFinishEvent, Status: r.GetStatus(), Message: "finish", Obj: r})
 					break
 				}
-
-				newBatch := make([]runningTask, len(nextTasks))
-				for i := range nextTasks {
-					newBatch[i] = runningTask{
-						Task: nextTasks[i],
-						FSM:  buildFlowTaskFSM(r, nextTasks[i]),
-					}
-				}
-				r.batch = newBatch
-				r.logger.Infof("got new batch, contain %d tasks", len(r.batch))
 			} else {
 				r.logger.Warn("retry current batch")
 			}
@@ -165,6 +152,61 @@ func (r *runner) flowRun() error {
 		r.logger.Info("flow finish")
 	}()
 
+	return nil
+}
+
+func (r *runner) makeNextBatch() error {
+	var (
+		nextTasks []flow.Task
+		meta      *storage.FlowMeta
+		err       error
+	)
+
+	meta, err = r.storage.GetFlowMeta(r.Flow.ID())
+	if err != nil {
+		return fmt.Errorf("query flow meta error: %s", err.Error())
+	}
+	for len(nextTasks) == 0 {
+		nextTasks, err = r.NextBatch(r.ctx)
+		if err != nil {
+			r.logger.Errorf("got next batch error: %s", err.Error())
+			return err
+		}
+
+		if len(nextTasks) == 0 {
+			// all task finish
+			return nil
+		}
+
+		newBatch := make([]runningTask, 0, len(nextTasks))
+		for i, task := range nextTasks {
+
+			oldTaskStatus, queryTaskErr := meta.QueryTaskStatus(task.Name())
+			if queryTaskErr != nil {
+				if queryTaskErr == storage.ErrNotFound {
+					// new task
+					newBatch = append(newBatch, runningTask{
+						Task: nextTasks[i],
+						FSM:  buildFlowTaskFSM(r, nextTasks[i]),
+					})
+					continue
+				}
+				return fmt.Errorf("query task status %s error: %s", task.Name(), err.Error())
+			}
+
+			r.logger.Infof("loaded old task record, status is %s(isFinish=%v)", oldTaskStatus, IsFinishedStatus(oldTaskStatus))
+			if IsFinishedStatus(oldTaskStatus) {
+				continue
+			}
+
+			newBatch = append(newBatch, runningTask{
+				Task: nextTasks[i],
+				FSM:  buildFlowTaskFSM(r, nextTasks[i]),
+			})
+		}
+		r.batch = newBatch
+	}
+	r.logger.Infof("got new batch, contain %d tasks", len(r.batch))
 	return nil
 }
 
@@ -323,6 +365,12 @@ func (r *runner) runBatchTasks() error {
 	)
 
 	triggerTask := func(task runningTask) error {
+		r.logger.Infof("trigger task %s", task.Name())
+		if IsFinishedStatus(task.GetStatus()) {
+			r.logger.Warnf("task %s was finished(%s)", task.Name(), task.GetStatus())
+			return nil
+		}
+
 		select {
 		case <-r.ctx.Done():
 			r.logger.Infof("flow was closed, skip task %s trigger", task.Name())
@@ -375,7 +423,6 @@ func (r *runner) runBatchTasks() error {
 			return fmt.Errorf("task setup failed: %s", msg)
 		}
 
-		r.logger.Infof("trigger task %s", task.Name())
 		if err := triggerTask(r.batch[i]); err != nil {
 			return err
 		}

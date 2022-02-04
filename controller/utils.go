@@ -2,6 +2,8 @@ package controller
 
 import (
 	"bytes"
+	"github.com/zwwhdls/go-flow/flow"
+	"github.com/zwwhdls/go-flow/fsm"
 )
 
 type Errors []error
@@ -22,4 +24,13 @@ func (e Errors) IsError() bool {
 
 func NewErrors() Errors {
 	return []error{}
+}
+
+func IsFinishedStatus(sts fsm.Status) bool {
+	switch sts {
+	case flow.SucceedStatus, flow.FailedStatus, flow.CanceledStatus:
+		return true
+	default:
+		return false
+	}
 }

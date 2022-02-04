@@ -20,11 +20,10 @@ var _ = Describe("test_runner", func() {
 			Chaos: ChaosPolicy{},
 		}
 		flowObj flow.Flow
-		err     error
 	)
 	Context("create-simple-flow", func() {
-		flowObj, err = controller.NewFlow(builder)
-		Expect(err).Should(BeNil())
+		flowObj = builder.Build()
+		Expect(flowStorage.SaveFlow(flowObj)).Should(BeNil())
 	})
 
 	Context("trigger-simper-flow", func() {
@@ -47,11 +46,10 @@ var _ = Describe("test_runner_failed", func() {
 		var (
 			builder ChaosFlowBuilder
 			flowObj flow.Flow
-			err     error
 		)
 		BeforeEach(func() {
-			flowObj, err = controller.NewFlow(builder)
-			Expect(err).Should(BeNil())
+			flowObj = builder.Build()
+			Expect(flowStorage.SaveFlow(flowObj)).Should(BeNil())
 		})
 
 		Context("test-fast-failed-1", func() {
@@ -131,9 +129,8 @@ var _ = Describe("test_runner_failed", func() {
 			flowObj flow.Flow
 		)
 		BeforeEach(func() {
-			var err error
-			flowObj, err = controller.NewFlow(builder)
-			Expect(err).Should(BeNil())
+			flowObj = builder.Build()
+			Expect(flowStorage.SaveFlow(flowObj)).Should(BeNil())
 		})
 
 		Context("test-setup-failed", func() {
@@ -152,9 +149,8 @@ var _ = Describe("test_runner_failed", func() {
 			flowObj flow.Flow
 		)
 		BeforeEach(func() {
-			var err error
-			flowObj, err = controller.NewFlow(builder)
-			Expect(err).Should(BeNil())
+			flowObj = builder.Build()
+			Expect(flowStorage.SaveFlow(flowObj)).Should(BeNil())
 		})
 
 		Context("test-first-task-setup-failed", func() {
@@ -233,9 +229,8 @@ var _ = Describe("test_runner_control", func() {
 		flowObj flow.Flow
 	)
 	BeforeEach(func() {
-		var err error
-		flowObj, err = controller.NewFlow(builder)
-		Expect(err).Should(BeNil())
+		flowObj = builder.Build()
+		Expect(flowStorage.SaveFlow(flowObj)).Should(BeNil())
 	})
 
 	Describe("test-simple-control", func() {

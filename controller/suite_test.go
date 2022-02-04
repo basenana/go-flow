@@ -16,10 +16,14 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var controller *FlowController
+var (
+	controller  *FlowController
+	flowStorage storage.Interface
+)
 
 func init() {
-	controller, _ = NewFlowController(Option{Storage: storage.NewInMemoryStorage()})
+	flowStorage = storage.NewInMemoryStorage()
+	controller, _ = NewFlowController(Option{Storage: flowStorage})
 }
 
 func TestController(t *testing.T) {

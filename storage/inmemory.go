@@ -7,8 +7,9 @@ import (
 )
 
 const (
-	flowKeyTpl = "storage.flow.%s"
-	taskKeyTpl = "storage.flow.%s.task.%s"
+	flowKeyTpl     = "storage.flow.%s"
+	flowMetaKeyTpl = "storage.flow-meta.%s"
+	taskKeyTpl     = "storage.flow.%s.task.%s"
 )
 
 var ErrNotFound = fmt.Errorf("not found")
@@ -26,7 +27,22 @@ func (m *MemStorage) GetFlow(flowId flow.FID) (flow.Flow, error) {
 	return obj.(flow.Flow), nil
 }
 
+func (m *MemStorage) GetFlowMeta(flowId flow.FID) (*FlowMeta, error) {
+	k := fmt.Sprintf(flowMetaKeyTpl, flowId)
+	obj, ok := m.Load(k)
+	if !ok {
+		return nil, ErrNotFound
+	}
+	return obj.(*FlowMeta), nil
+}
+
 func (m *MemStorage) SaveFlow(flow flow.Flow) error {
+	mk := fmt.Sprintf(flowMetaKeyTpl, flow.ID())
+	_, ok := m.Load(mk)
+	if !ok {
+		m.Store(mk, &FlowMeta{})
+	}
+
 	k := fmt.Sprintf(flowKeyTpl, flow.ID())
 	m.Store(k, flow)
 	return nil
@@ -39,15 +55,6 @@ func (m *MemStorage) DeleteFlow(flowId flow.FID) (flow.Flow, error) {
 		return nil, ErrNotFound
 	}
 	return obj.(flow.Flow), nil
-}
-
-func (m *MemStorage) GetTask(flowId flow.FID, taskName flow.TName) (flow.Task, error) {
-	k := fmt.Sprintf(taskKeyTpl, flowId, taskName)
-	obj, ok := m.Load(k)
-	if !ok {
-		return nil, ErrNotFound
-	}
-	return obj.(flow.Task), nil
 }
 
 func (m *MemStorage) SaveTask(flowId flow.FID, task flow.Task) error {
