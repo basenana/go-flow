@@ -4,11 +4,16 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/zwwhdls/go-flow/flow"
+	"github.com/zwwhdls/go-flow/storage"
 )
 
 type SingleFlow struct {
 	*basic
 	tasks []flow.Task
+}
+
+func (s SingleFlow) Type() flow.FType {
+	return "Single"
 }
 
 var _ flow.Flow = &SingleFlow{}
@@ -36,24 +41,14 @@ func (s *SingleFlow) NextBatch(ctx *flow.Context) ([]flow.Task, error) {
 	return []flow.Task{t}, nil
 }
 
-type SingleFlowBuilder struct {
-	tasks  []flow.Task
-	policy flow.ControlPolicy
-}
-
-var _ FlowBuilder = SingleFlowBuilder{}
-
-func (s SingleFlowBuilder) Build() flow.Flow {
-	return &SingleFlow{
+func NewSingleFlow(s storage.Interface, tasks []flow.Task, policy flow.ControlPolicy) error {
+	f := &SingleFlow{
 		basic: &basic{
 			id:     flow.FID(fmt.Sprintf("single-flow-%s", uuid.New().String())),
 			status: flow.CreatingStatus,
-			policy: s.policy,
+			policy: policy,
 		},
-		tasks: s.tasks,
+		tasks: tasks,
 	}
-}
-
-func NewSingleFlowBuilder(tasks []flow.Task, policy flow.ControlPolicy) FlowBuilder {
-	return SingleFlowBuilder{tasks: tasks, policy: policy}
+	return s.SaveFlow(f)
 }

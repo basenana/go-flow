@@ -7,12 +7,21 @@ import (
 	"github.com/zwwhdls/go-flow/fsm"
 	"github.com/zwwhdls/go-flow/log"
 	"github.com/zwwhdls/go-flow/storage"
+	"reflect"
 )
 
 type FlowController struct {
 	flows   map[flow.FID]*runner
 	storage storage.Interface
 	logger  log.Logger
+}
+
+func (c FlowController) Register(f flow.Flow) error {
+	if reflect.TypeOf(f).Kind() != reflect.Ptr {
+		return fmt.Errorf("flow %v obj not ptr", f)
+	}
+	flow.FlowTypes[f.Type()] = reflect.TypeOf(f)
+	return nil
 }
 
 func (c *FlowController) TriggerFlow(ctx context.Context, flowId flow.FID) error {

@@ -48,13 +48,13 @@ func (m *MemStorage) SaveFlow(flow flow.Flow) error {
 	return nil
 }
 
-func (m *MemStorage) DeleteFlow(flowId flow.FID) (flow.Flow, error) {
+func (m *MemStorage) DeleteFlow(flowId flow.FID) error {
 	k := fmt.Sprintf(flowKeyTpl, flowId)
-	obj, ok := m.LoadAndDelete(k)
+	_, ok := m.LoadAndDelete(k)
 	if !ok {
-		return nil, ErrNotFound
+		return ErrNotFound
 	}
-	return obj.(flow.Flow), nil
+	return nil
 }
 
 func (m *MemStorage) SaveTask(flowId flow.FID, task flow.Task) error {
@@ -63,13 +63,13 @@ func (m *MemStorage) SaveTask(flowId flow.FID, task flow.Task) error {
 	return nil
 }
 
-func (m *MemStorage) DeleteTask(flowId flow.FID, taskName flow.TName) (flow.Task, error) {
+func (m *MemStorage) DeleteTask(flowId flow.FID, taskName flow.TName) error {
 	k := fmt.Sprintf(taskKeyTpl, flowId, taskName)
-	obj, ok := m.LoadAndDelete(k)
+	_, ok := m.LoadAndDelete(k)
 	if !ok {
-		return nil, ErrNotFound
+		return ErrNotFound
 	}
-	return obj.(flow.Task), nil
+	return nil
 }
 
 func NewInMemoryStorage() Interface {
