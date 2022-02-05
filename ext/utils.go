@@ -41,6 +41,10 @@ type TaskNameSet map[flow.TName]struct{}
 func (s TaskNameSet) Insert(t flow.TName) {
 	s[t] = struct{}{}
 }
+func (s TaskNameSet) Has(task flow.TName) bool {
+	_, ok := s[task]
+	return ok
+}
 
 func (s TaskNameSet) Del(t flow.TName) {
 	if _, ok := s[t]; ok {

@@ -10,6 +10,7 @@ type Context struct {
 	log.Logger
 
 	FlowId    FID
+	TaskName  TName
 	Message   string
 	MaxRetry  int
 	IsSucceed bool

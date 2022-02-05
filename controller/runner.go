@@ -416,7 +416,7 @@ func (r *runner) runBatchTasks() error {
 			}
 
 			if updateTaskStatsErr := task.Event(fsm.Event{Type: flow.TaskExecuteErrorEvent, Status: task.GetStatus(), Obj: task.Task}); updateTaskStatsErr != nil {
-				setupCtx.Logger.Errorf("update task status failed: %s", err.Error())
+				setupCtx.Logger.Errorf("update task status failed: %s", updateTaskStatsErr.Error())
 			}
 
 			setupCtx.Logger.Warnf("context not got succeed: %s", msg)
@@ -448,8 +448,10 @@ func (r *runner) taskRun(task runningTask) error {
 	)
 	ctx := &flow.Context{
 		Context:  r.batchCtx.Context,
+		Logger:   r.logger.With("task"),
 		FlowId:   r.batchCtx.FlowId,
 		MaxRetry: defaultRetryTime,
+		TaskName: task.Name(),
 	}
 	r.logger.Infof("task %s started", task.Name())
 	for {

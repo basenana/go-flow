@@ -2,9 +2,7 @@ package controller
 
 import (
 	"fmt"
-	"github.com/google/uuid"
 	"github.com/onsi/ginkgo/config"
-	"github.com/zwwhdls/go-flow/ext"
 	"github.com/zwwhdls/go-flow/flow"
 	"github.com/zwwhdls/go-flow/fsm"
 	"github.com/zwwhdls/go-flow/storage"
@@ -45,6 +43,10 @@ type ChaosFlow struct {
 }
 
 var _ flow.Flow = &ChaosFlow{}
+
+func (f ChaosFlow) Type() flow.FType {
+	return "chaos"
+}
 
 func (f ChaosFlow) GetStatus() fsm.Status {
 	return f.status
@@ -99,7 +101,7 @@ func (f *ChaosFlow) NextBatch(ctx *flow.Context) ([]flow.Task, error) {
 	batchTasks := make([]flow.Task, f.parallel)
 	for i := 0; i < f.parallel; i++ {
 		crtCtn := f.taskCount + 1
-		batchTasks[i] = ext.BuildSampleTask(fmt.Sprintf("task-%d", crtCtn), ext.TaskSpec{
+		batchTasks[i] = BuildSampleTask(fmt.Sprintf("task-%d", crtCtn), TaskSpec{
 			Setup: func(ctx *flow.Context) error {
 				f.doIdle()
 				if f.chaos.FailTaskIdx == crtCtn && f.chaos.TaskSetupErr != nil {
@@ -138,26 +140,6 @@ func (f ChaosFlow) doIdle() {
 	time.Sleep(time.Duration(sleepTime) * time.Second)
 }
 
-type ChaosFlowBuilder struct {
-	BatchNum int
-	Parallel int
-	Policy   flow.ControlPolicy
-	Chaos    ChaosPolicy
-}
-
-var _ ext.FlowBuilder = ChaosFlowBuilder{}
-
-func (f ChaosFlowBuilder) Build() flow.Flow {
-	return &ChaosFlow{
-		id:        flow.FID(fmt.Sprintf("chaos-flow-%s", uuid.New().String())),
-		batchLeft: f.BatchNum,
-		parallel:  f.Parallel,
-		status:    flow.CreatingStatus,
-		policy:    f.Policy,
-		chaos:     f.Chaos,
-	}
-}
-
 type ChaosPolicy struct {
 	FailTaskIdx  int
 	TaskErr      error
@@ -168,4 +150,67 @@ type ChaosPolicy struct {
 
 func status2Bytes(status fsm.Status) []byte {
 	return []byte(status)
+}
+
+type Task struct {
+	name     flow.TName
+	taskType string
+	appId    string
+	status   fsm.Status
+	message  string
+
+	setupFunc    func(ctx *flow.Context) error
+	doFunc       func(ctx *flow.Context) error
+	teardownFunc func(ctx *flow.Context)
+}
+
+var _ flow.Task = &Task{}
+
+func (t Task) GetStatus() fsm.Status {
+	return t.status
+}
+
+func (t *Task) SetStatus(status fsm.Status) {
+	t.status = status
+}
+
+func (t Task) GetMessage() string {
+	return t.message
+}
+
+func (t *Task) SetMessage(msg string) {
+	t.message = msg
+}
+
+func (t Task) Name() flow.TName {
+	return t.name
+}
+
+func (t Task) Setup(ctx *flow.Context) error {
+	return t.setupFunc(ctx)
+}
+
+func (t Task) Do(ctx *flow.Context) error {
+	return t.doFunc(ctx)
+}
+
+func (t Task) Teardown(ctx *flow.Context) {
+	t.teardownFunc(ctx)
+}
+
+func BuildSampleTask(uniqueName string, spec TaskSpec) flow.Task {
+	return &Task{
+		name:   flow.TName(uniqueName),
+		status: flow.CreatingStatus,
+
+		setupFunc:    spec.Setup,
+		doFunc:       spec.Do,
+		teardownFunc: spec.Teardown,
+	}
+}
+
+type TaskSpec struct {
+	Setup    func(ctx *flow.Context) error
+	Do       func(ctx *flow.Context) error
+	Teardown func(ctx *flow.Context)
 }
