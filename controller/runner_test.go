@@ -1,8 +1,25 @@
+/*
+   Copyright 2022 Go-Flow Authors
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+*/
+
 package controller
 
 import (
 	"context"
 	"fmt"
+	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/zwwhdls/go-flow/flow"
@@ -293,3 +310,21 @@ var _ = Describe("test_runner_control", func() {
 		})
 	})
 })
+
+type ChaosFlowBuilder struct {
+	BatchNum int
+	Parallel int
+	Policy   flow.ControlPolicy
+	Chaos    ChaosPolicy
+}
+
+func (f ChaosFlowBuilder) Build() flow.Flow {
+	return &ChaosFlow{
+		id:        flow.FID(fmt.Sprintf("chaos-flow-%s", uuid.New().String())),
+		batchLeft: f.BatchNum,
+		parallel:  f.Parallel,
+		status:    flow.CreatingStatus,
+		policy:    f.Policy,
+		chaos:     f.Chaos,
+	}
+}
