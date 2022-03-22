@@ -17,8 +17,8 @@
 package ext
 
 import (
-	"github.com/zwwhdls/go-flow/flow"
-	"github.com/zwwhdls/go-flow/fsm"
+	"github.com/basenana/go-flow/flow"
+	"github.com/basenana/go-flow/fsm"
 )
 
 type basic struct {

@@ -17,7 +17,7 @@
 package flow
 
 import (
-	"github.com/zwwhdls/go-flow/fsm"
+	"github.com/basenana/go-flow/fsm"
 	"reflect"
 )
 

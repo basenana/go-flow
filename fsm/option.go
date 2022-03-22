@@ -17,7 +17,7 @@
 package fsm
 
 import (
-	"github.com/zwwhdls/go-flow/log"
+	"github.com/basenana/go-flow/log"
 )
 
 type Option struct {
