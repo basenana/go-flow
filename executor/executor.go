@@ -1,5 +1,5 @@
 /*
-   Copyright 2022 Go-Flow Authors
+   Copyright 2023 Go-Flow Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,29 +14,13 @@
    limitations under the License.
 */
 
-package flow
+package executor
 
 import (
 	"context"
-	"github.com/basenana/go-flow/utils"
+	"github.com/basenana/go-flow/operator"
 )
 
-type Context struct {
-	context.Context
-	utils.Logger
-
-	FlowId    string
-	TaskName  string
-	Message   string
-	MaxRetry  int
-	IsSucceed bool
-}
-
-func (c *Context) Succeed() {
-	c.IsSucceed = true
-}
-
-func (c *Context) Fail(message string, maxRetry int) {
-	c.Message = message
-	c.MaxRetry = maxRetry
+type Executor interface {
+	DoOperation(ctx context.Context, operator operator.Operator) error
 }

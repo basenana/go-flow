@@ -18,25 +18,24 @@ package ext
 
 import (
 	"github.com/basenana/go-flow/flow"
-	"github.com/basenana/go-flow/fsm"
 )
 
 type basic struct {
-	id      flow.FID
-	status  fsm.Status
+	id      string
+	status  string
 	message string
 	policy  flow.ControlPolicy
 }
 
-func (b basic) ID() flow.FID {
+func (b basic) ID() string {
 	return b.id
 }
 
-func (b basic) GetStatus() fsm.Status {
+func (b basic) GetStatus() string {
 	return b.status
 }
 
-func (b *basic) SetStatus(status fsm.Status) {
+func (b *basic) SetStatus(status string) {
 	b.status = status
 }
 
@@ -52,23 +51,23 @@ func (b basic) GetControlPolicy() flow.ControlPolicy {
 	return b.policy
 }
 
-type TaskNameSet map[flow.TName]struct{}
+type TaskNameSet map[string]struct{}
 
-func (s TaskNameSet) Insert(t flow.TName) {
+func (s TaskNameSet) Insert(t string) {
 	s[t] = struct{}{}
 }
-func (s TaskNameSet) Has(task flow.TName) bool {
+func (s TaskNameSet) Has(task string) bool {
 	_, ok := s[task]
 	return ok
 }
 
-func (s TaskNameSet) Del(t flow.TName) {
+func (s TaskNameSet) Del(t string) {
 	if _, ok := s[t]; ok {
 		delete(s, t)
 	}
 }
 
-func (s TaskNameSet) List() (result []flow.TName) {
+func (s TaskNameSet) List() (result []string) {
 	for k := range s {
 		result = append(result, k)
 	}
@@ -80,5 +79,5 @@ func (s TaskNameSet) Len() int {
 }
 
 func NewTaskNameSet() TaskNameSet {
-	return map[flow.TName]struct{}{}
+	return map[string]struct{}{}
 }

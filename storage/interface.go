@@ -17,14 +17,18 @@
 package storage
 
 import (
+	"context"
+	"errors"
 	"github.com/basenana/go-flow/flow"
 )
 
+var (
+	NotFound = errors.New("NotFound")
+)
+
 type Interface interface {
-	GetFlow(flowId flow.FID) (flow.Flow, error)
-	GetFlowMeta(flowId flow.FID) (*FlowMeta, error)
-	SaveFlow(flow flow.Flow) error
-	DeleteFlow(flowId flow.FID) error
-	SaveTask(flowId flow.FID, task flow.Task) error
-	DeleteTask(flowId flow.FID, taskName flow.TName) error
+	GetFlow(ctx context.Context, flowId string) (*flow.Flow, error)
+	SaveFlow(ctx context.Context, flow *flow.Flow) error
+	DeleteFlow(ctx context.Context, flowId string) error
+	SaveTask(ctx context.Context, flowId string, task *flow.Task) error
 }

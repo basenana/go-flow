@@ -1,5 +1,5 @@
 /*
-   Copyright 2022 Go-Flow Authors
+   Copyright 2023 Go-Flow Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,16 +14,10 @@
    limitations under the License.
 */
 
-package log
+package operator
 
-type Logger interface {
-	Error(interface{})
-	Errorf(string, ...interface{})
-	Warn(interface{})
-	Warnf(string, ...interface{})
-	Info(interface{})
-	Infof(string, ...interface{})
-	Debug(interface{})
-	Debugf(string, ...interface{})
-	With(string) Logger
+type Spec struct {
+}
+
+type Operator interface {
 }

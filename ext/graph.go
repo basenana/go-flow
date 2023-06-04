@@ -20,57 +20,46 @@ import (
 	"errors"
 	"fmt"
 	"github.com/basenana/go-flow/flow"
-	"github.com/basenana/go-flow/fsm"
 	"github.com/basenana/go-flow/storage"
 	"github.com/google/uuid"
 )
 
 type GraphFlow struct {
 	*basic
-	tasks   map[flow.TName]*GraphTask
-	batches [][]flow.TName
+	tasks   map[string]*GraphTask
+	batches [][]string
 }
 
-var _ flow.Flow = &GraphFlow{}
-
-func (g GraphFlow) Type() flow.FType {
-	return "GraphFlow"
-}
-
-func (g GraphFlow) GetHooks() flow.Hooks {
-	return map[flow.HookType]flow.Hook{}
-}
-
-func (g GraphFlow) Setup(ctx *flow.Context) error {
+func (g *GraphFlow) Setup(ctx *flow.Context) error {
 	ctx.Succeed()
 	return nil
 }
 
-func (g GraphFlow) Teardown(ctx *flow.Context) {
+func (g *GraphFlow) Teardown(ctx *flow.Context) {
 	return
 }
 
-func (g GraphFlow) taskDoFunc(ctx *flow.Context, appId string) error {
+func (g *GraphFlow) taskDoFunc(ctx *flow.Context, appId string) error {
 	// define your task func here
 	ctx.Logger.Infof("app %s task done", appId)
 	ctx.Succeed()
 	return nil
 }
 
-func (g GraphFlow) taskTearDownFunc(ctx *flow.Context, appId string) {
+func (g *GraphFlow) taskTearDownFunc(ctx *flow.Context, appId string) {
 	// define your task func here
 	ctx.Logger.Infof("app %s task teardown", appId)
 	ctx.Succeed()
 }
 
-func (g GraphFlow) taskSetUpFunc(ctx *flow.Context, appId string) error {
+func (g *GraphFlow) taskSetUpFunc(ctx *flow.Context, appId string) error {
 	// define your task func here
 	ctx.Logger.Infof("app %s task setup", appId)
 	ctx.Succeed()
 	return nil
 }
 
-func (g *GraphFlow) NextBatch(ctx *flow.Context) ([]flow.Task, error) {
+func (g *GraphFlow) NextBatch(ctx *flow.Context) ([]flow.ITask, error) {
 	if len(g.batches) == 0 {
 		return nil, nil
 	}
@@ -78,7 +67,7 @@ func (g *GraphFlow) NextBatch(ctx *flow.Context) ([]flow.Task, error) {
 	crtBatch := g.batches[0]
 	g.batches = g.batches[1:]
 
-	tasks := make([]flow.Task, len(crtBatch))
+	tasks := make([]flow.ITask, len(crtBatch))
 	for i, tName := range crtBatch {
 		task := g.tasks[tName]
 		task.doFunc = func(ctx *flow.Context) error {
@@ -95,7 +84,7 @@ func (g *GraphFlow) NextBatch(ctx *flow.Context) ([]flow.Task, error) {
 	return tasks, nil
 }
 
-func NewGraphFlow(s storage.Interface, tasks []*GraphTask, dep *TaskDep, policy flow.ControlPolicy) (flow.Flow, error) {
+func NewGraphFlow(s storage.Interface, tasks []*GraphTask, dep *TaskDep, policy flow.ControlPolicy) (*GraphFlow, error) {
 	if dep == nil || dep.taskEdges == nil {
 		dep = NewTaskDep()
 	}
@@ -105,14 +94,14 @@ func NewGraphFlow(s storage.Interface, tasks []*GraphTask, dep *TaskDep, policy 
 		return nil, err
 	}
 
-	taskMap := make(map[flow.TName]*GraphTask)
+	taskMap := make(map[string]*GraphTask)
 	for i, t := range tasks {
 		taskMap[t.TaskName] = tasks[i]
 	}
 
 	f := &GraphFlow{
 		basic: &basic{
-			id:     flow.FID(fmt.Sprintf("graph-flow-%s", uuid.New().String())),
+			id:     fmt.Sprintf("graph-flow-%s", uuid.New().String()),
 			policy: policy,
 		},
 		tasks:   taskMap,
@@ -122,21 +111,21 @@ func NewGraphFlow(s storage.Interface, tasks []*GraphTask, dep *TaskDep, policy 
 }
 
 type GraphTask struct {
-	TaskName flow.TName
+	TaskName string
 	AppId    string
 	Message  string
-	status   fsm.Status
+	status   string
 
 	setupFunc    func(ctx *flow.Context) error
 	doFunc       func(ctx *flow.Context) error
 	teardownFunc func(ctx *flow.Context)
 }
 
-func (g GraphTask) GetStatus() fsm.Status {
+func (g GraphTask) GetStatus() string {
 	return g.status
 }
 
-func (g *GraphTask) SetStatus(status fsm.Status) {
+func (g *GraphTask) SetStatus(status string) {
 	g.status = status
 }
 
@@ -148,7 +137,7 @@ func (g *GraphTask) SetMessage(msg string) {
 	g.Message = msg
 }
 
-func (g GraphTask) Name() flow.TName {
+func (g GraphTask) Name() string {
 	return g.TaskName
 }
 
@@ -166,7 +155,7 @@ func (g GraphTask) Teardown(ctx *flow.Context) {
 
 func NewGraphTask(name, appId, msg string) *GraphTask {
 	return &GraphTask{
-		TaskName: flow.TName(name),
+		TaskName: name,
 		AppId:    appId,
 		Message:  msg,
 		status:   flow.CreatingStatus,
@@ -175,18 +164,18 @@ func NewGraphTask(name, appId, msg string) *GraphTask {
 
 type TaskDep struct {
 	taskSet   TaskNameSet
-	taskEdges map[flow.TName][]flow.TName
-	preCount  map[flow.TName]int
+	taskEdges map[string][]string
+	preCount  map[string]int
 }
 
-func (t *TaskDep) RunOrder(firstTask flow.TName, tasks []flow.TName) {
+func (t *TaskDep) RunOrder(firstTask string, tasks []string) {
 	t.taskSet.Insert(firstTask)
 	for _, task := range tasks {
 		t.taskSet.Insert(task)
 
 		edges, ok := t.taskEdges[firstTask]
 		if !ok {
-			edges = make([]flow.TName, 0)
+			edges = make([]string, 0)
 		}
 
 		exist := false
@@ -205,10 +194,10 @@ func (t *TaskDep) RunOrder(firstTask flow.TName, tasks []flow.TName) {
 	}
 }
 
-func (t *TaskDep) Lists() (result [][]flow.TName, err error) {
+func (t *TaskDep) Lists() (result [][]string, err error) {
 
 	for t.taskSet.Len() != 0 {
-		batch := make([]flow.TName, 0)
+		batch := make([]string, 0)
 		duty := NewTaskNameSet()
 		for _, tName := range t.taskSet.List() {
 			if duty.Has(tName) {
@@ -239,7 +228,7 @@ func (t *TaskDep) Lists() (result [][]flow.TName, err error) {
 func NewTaskDep() *TaskDep {
 	return &TaskDep{
 		taskSet:   NewTaskNameSet(),
-		taskEdges: map[flow.TName][]flow.TName{},
-		preCount:  map[flow.TName]int{},
+		taskEdges: map[string][]string{},
+		preCount:  map[string]int{},
 	}
 }

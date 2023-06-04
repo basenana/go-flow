@@ -1,5 +1,5 @@
 /*
-   Copyright 2022 Go-Flow Authors
+   Copyright 2023 Go-Flow Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,10 +14,20 @@
    limitations under the License.
 */
 
-package storage
+package executor
 
-import "errors"
-
-var (
-	NotFound = errors.New("NotFound")
+import (
+	"context"
+	"github.com/basenana/go-flow/operator"
 )
+
+type LocalExecutor struct {
+}
+
+func (l *LocalExecutor) DoOperation(ctx context.Context, operator operator.Operator) error {
+	return nil
+}
+
+func NewLocalExecutor() Executor {
+	return nil
+}

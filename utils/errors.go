@@ -1,5 +1,5 @@
 /*
-   Copyright 2022 Go-Flow Authors
+   Copyright 2023 Go-Flow Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,24 +14,26 @@
    limitations under the License.
 */
 
-package storage
+package utils
 
-import (
-	"github.com/basenana/go-flow/flow"
-	"github.com/basenana/go-flow/fsm"
-)
+import "bytes"
 
-type FlowMeta struct {
-	Type       flow.FType
-	Id         flow.FID
-	Status     fsm.Status
-	TaskStatus map[flow.TName]fsm.Status
+type Errors []error
+
+func (e Errors) Error() string {
+	buf := bytes.Buffer{}
+	for _, oneE := range e {
+		buf.WriteString(oneE.Error())
+		buf.WriteString(" ")
+	}
+
+	return buf.String()
 }
 
-func (f FlowMeta) QueryTaskStatus(taskName flow.TName) (fsm.Status, error) {
-	status, ok := f.TaskStatus[taskName]
-	if !ok {
-		return "", NotFound
-	}
-	return status, nil
+func (e Errors) IsError() bool {
+	return len(e) > 0
+}
+
+func NewErrors() Errors {
+	return []error{}
 }

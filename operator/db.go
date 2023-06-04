@@ -1,5 +1,5 @@
 /*
-   Copyright 2022 Go-Flow Authors
+   Copyright 2023 Go-Flow Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,29 +14,10 @@
    limitations under the License.
 */
 
-package flow
+package operator
 
-import (
-	"context"
-	"github.com/basenana/go-flow/utils"
-)
-
-type Context struct {
-	context.Context
-	utils.Logger
-
-	FlowId    string
-	TaskName  string
-	Message   string
-	MaxRetry  int
-	IsSucceed bool
+type MySQLOperator struct {
 }
 
-func (c *Context) Succeed() {
-	c.IsSucceed = true
-}
-
-func (c *Context) Fail(message string, maxRetry int) {
-	c.Message = message
-	c.MaxRetry = maxRetry
+type PostgresOperator struct {
 }

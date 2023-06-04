@@ -14,86 +14,86 @@
    limitations under the License.
 */
 
-package controller
+package executor
 
 import (
 	"context"
 	"fmt"
 	"github.com/basenana/go-flow/flow"
 	"github.com/basenana/go-flow/fsm"
-	"github.com/basenana/go-flow/log"
 	"github.com/basenana/go-flow/storage"
+	"github.com/basenana/go-flow/utils"
 	"reflect"
 	"sync"
 	"time"
 )
 
-type runner struct {
-	flow.Flow
+type Runner interface {
+	Start(ctx context.Context) error
+	Pause() error
+	Resume() error
+	Cancel() error
+}
 
-	ctx    *flow.Context
+func NewRunner(f *flow.Flow, s storage.Interface) Runner {
+	return nil
+}
+
+type runner struct {
+	*flow.Flow
+
+	ctx    context.Context
 	stopCh chan struct{}
 	fsm    *fsm.FSM
+	dag    *DAG
 
 	batch     []runningTask
-	batchCtx  *flow.Context
+	batchCtx  context.Context
 	batchCanF context.CancelFunc
 
 	storage storage.Interface
-	logger  log.Logger
+	logger  utils.Logger
 }
 
-func (r *runner) Start(ctx *flow.Context) error {
+func (r *runner) Start(ctx context.Context) error {
 	r.ctx = ctx
-	r.SetStatus(flow.InitializingStatus)
-	if err := r.storage.SaveFlow(r.Flow); err != nil {
-		r.logger.Errorf("save flow status failed: %s", err.Error())
-		return err
+	if r.Status != flow.InitializingStatus {
+		r.SetStatus(flow.InitializingStatus)
+		if err := r.storage.SaveFlow(r.ctx, r.Flow); err != nil {
+			r.logger.Errorf("save flow status failed: %s", err.Error())
+			return err
+		}
 	}
 
 	r.fsm = buildFlowFSM(r)
-
-	setupCtx := &flow.Context{
-		Context: ctx.Context,
-		Logger:  ctx.Logger.With("setup"),
-		FlowId:  r.ID(),
-	}
-	if err := r.Setup(setupCtx); err != nil || !setupCtx.IsSucceed {
-		if err == nil {
-			err = fmt.Errorf("flow setup failed: %s", setupCtx.Message)
-		}
-		setupCtx.Logger.Errorf("flow setup failed: %s", err.Error())
-		_ = r.pushEvent2FlowFSM(fsm.Event{Type: flow.ExecuteErrorEvent, Status: r.GetStatus(), Message: "flow setup failed", Obj: r})
-		return err
-	}
 
 	r.logger.Info("flow ready to run")
 	if err := r.pushEvent2FlowFSM(fsm.Event{Type: flow.TriggerEvent, Status: r.GetStatus(), Obj: r}); err != nil {
 		return err
 	}
 
-	if err := r.storage.SaveFlow(r.Flow); err != nil {
-		r.logger.Errorf("save flow status failed: %s", err.Error())
+	return nil
+}
+
+func (r *runner) Pause() error {
+	if r.Status == flow.RunningStatus {
+		return r.pushEvent2FlowFSM(fsm.Event{Type: flow.ExecutePauseEvent, Obj: r.Flow})
 	}
-	return r.flowRun()
+	return nil
 }
 
-func (r *runner) Pause(event fsm.Event) error {
-	event.Type = flow.ExecutePauseEvent
-	event.Obj = r
-	return r.pushEvent2FlowFSM(event)
+func (r *runner) Resume() error {
+	if r.Status == flow.PausedStatus {
+		return r.pushEvent2FlowFSM(fsm.Event{Type: flow.ExecuteResumeEvent, Obj: r.Flow})
+	}
+	return nil
 }
 
-func (r *runner) Resume(event fsm.Event) error {
-	event.Type = flow.ExecuteResumeEvent
-	event.Obj = r
-	return r.pushEvent2FlowFSM(event)
-}
-
-func (r *runner) Cancel(event fsm.Event) error {
-	event.Type = flow.ExecuteCancelEvent
-	event.Obj = r
-	return r.pushEvent2FlowFSM(event)
+func (r *runner) Cancel() error {
+	if r.Status == flow.SucceedStatus || r.Status == flow.FailedStatus || r.Status == flow.ErrorStatus {
+		return nil
+	}
+	return r.pushEvent2FlowFSM(fsm.Event{Type: flow.ExecuteCancelEvent, Obj: r.Flow})
 }
 
 func (r *runner) flowRun() error {
@@ -150,13 +150,8 @@ func (r *runner) flowRun() error {
 				r.logger.Warn("retry current batch")
 			}
 
-			batchCtx, canF := context.WithCancel(r.ctx.Context)
-			r.batchCtx = &flow.Context{
-				Context:  batchCtx,
-				Logger:   r.logger,
-				FlowId:   r.ID(),
-				MaxRetry: r.ctx.MaxRetry,
-			}
+			batchCtx, canF := context.WithCancel(r.ctx)
+			r.batchCtx = batchCtx
 			r.batchCanF = canF
 
 			if err = r.runBatchTasks(); err != nil {
@@ -173,17 +168,12 @@ func (r *runner) flowRun() error {
 
 func (r *runner) makeNextBatch() error {
 	var (
-		nextTasks []flow.Task
-		meta      *storage.FlowMeta
+		nextTasks []*flow.Task
 		err       error
 	)
 
-	meta, err = r.storage.GetFlowMeta(r.Flow.ID())
-	if err != nil {
-		return fmt.Errorf("query flow meta error: %s", err.Error())
-	}
 	for len(nextTasks) == 0 {
-		nextTasks, err = r.NextBatch(r.ctx)
+		nextTasks, err = r.nextBatch()
 		if err != nil {
 			r.logger.Errorf("got next batch error: %s", err.Error())
 			return err
@@ -202,22 +192,22 @@ func (r *runner) makeNextBatch() error {
 				if queryTaskErr == storage.NotFound {
 					// new task
 					newBatch = append(newBatch, runningTask{
-						Task: nextTasks[i],
-						FSM:  buildFlowTaskFSM(r, nextTasks[i]),
+						ITask: nextTasks[i],
+						FSM:   buildFlowTaskFSM(r, nextTasks[i]),
 					})
 					continue
 				}
 				return fmt.Errorf("query task status %s error: %s", task.Name(), err.Error())
 			}
 
-			r.logger.Infof("loaded old task record, status is %s(isFinish=%v)", oldTaskStatus, IsFinishedStatus(oldTaskStatus))
-			if IsFinishedStatus(oldTaskStatus) {
+			r.logger.Infof("loaded old task record, status is %s(isFinish=%v)", oldTaskStatus, flow.IsFinishedStatus(oldTaskStatus))
+			if flow.IsFinishedStatus(oldTaskStatus) {
 				continue
 			}
 
 			newBatch = append(newBatch, runningTask{
-				Task: nextTasks[i],
-				FSM:  buildFlowTaskFSM(r, nextTasks[i]),
+				ITask: nextTasks[i],
+				FSM:   buildFlowTaskFSM(r, nextTasks[i]),
 			})
 		}
 		r.batch = newBatch
@@ -226,41 +216,18 @@ func (r *runner) makeNextBatch() error {
 	return nil
 }
 
+func (r *runner) nextBatch() ([]*flow.Task, error) {
+
+}
+
 func (r *runner) handleFlowRun(event fsm.Event) error {
-	hooks := r.GetHooks()
-	if hook, ok := hooks[flow.WhenTrigger]; ok {
-		if err := hook(r.ctx, r.Flow, nil); err != nil {
-			r.logger.Errorf("run flow trigger hook error: %s", err.Error())
-			return err
-		}
-	}
-	return nil
+	return r.flowRun()
 }
 
 func (r *runner) handleFlowPause(event fsm.Event) error {
 	r.logger.Info("flow pause")
 
-	pauseTasksErr := NewErrors()
-	for _, t := range r.batch {
-		if t.GetStatus() == flow.RunningStatus {
-			if err := t.Event(fsm.Event{Type: flow.TaskExecutePauseEvent, Status: t.GetStatus(), Obj: t.Task}); err != nil {
-				pauseTasksErr = append(pauseTasksErr, err)
-			}
-		}
-	}
-	if pauseTasksErr.IsError() {
-		return pauseTasksErr
-	}
-
-	hooks := r.GetHooks()
-	if hook, ok := hooks[flow.WhenExecutePause]; ok {
-		if err := hook(r.ctx, r.Flow, nil); err != nil {
-			r.logger.Errorf("run flow pause hook error: %s", err.Error())
-			return err
-		}
-	}
-
-	if err := r.storage.SaveFlow(r.Flow); err != nil {
+	if err := r.storage.SaveFlow(r.ctx, r.Flow); err != nil {
 		r.logger.Errorf("save flow status failed: %s", err.Error())
 		return err
 	}
@@ -270,27 +237,7 @@ func (r *runner) handleFlowPause(event fsm.Event) error {
 func (r *runner) handleFlowResume(event fsm.Event) error {
 	r.logger.Info("flow resume")
 
-	resumeTasksErr := NewErrors()
-	for _, t := range r.batch {
-		if t.GetStatus() == flow.PausedStatus {
-			if err := t.Event(fsm.Event{Type: flow.TaskExecuteResumeEvent, Status: t.GetStatus(), Obj: t.Task}); err != nil {
-				resumeTasksErr = append(resumeTasksErr, err)
-			}
-		}
-	}
-	if resumeTasksErr.IsError() {
-		return resumeTasksErr
-	}
-
-	hooks := r.GetHooks()
-	if hook, ok := hooks[flow.WhenExecuteResume]; ok {
-		if err := hook(r.ctx, r.Flow, nil); err != nil {
-			r.logger.Errorf("run flow resume hook error: %s", err.Error())
-			return err
-		}
-	}
-
-	if err := r.storage.SaveFlow(r.Flow); err != nil {
+	if err := r.storage.SaveFlow(r.ctx, r.Flow); err != nil {
 		r.logger.Errorf("save flow status failed: %s", err.Error())
 		return err
 	}
@@ -302,15 +249,7 @@ func (r *runner) handleFlowSucceed(event fsm.Event) error {
 	r.logger.Info("flow succeed")
 	r.stop("succeed")
 
-	hooks := r.GetHooks()
-	if hook, ok := hooks[flow.WhenExecuteSucceed]; ok {
-		if err := hook(r.ctx, r.Flow, nil); err != nil {
-			r.logger.Errorf("run flow succeed hook error: %s", err.Error())
-			return err
-		}
-	}
-
-	if err := r.storage.SaveFlow(r.Flow); err != nil {
+	if err := r.storage.SaveFlow(r.ctx, r.Flow); err != nil {
 		r.logger.Errorf("save flow status failed: %s", err.Error())
 		return err
 	}
@@ -321,15 +260,7 @@ func (r *runner) handleFlowFailed(event fsm.Event) error {
 	r.logger.Info("flow failed")
 	r.stop(event.Message)
 
-	hooks := r.GetHooks()
-	if hook, ok := hooks[flow.WhenExecuteFailed]; ok {
-		if err := hook(r.ctx, r.Flow, nil); err != nil {
-			r.logger.Errorf("run flow failed hook error: %s", err.Error())
-			return err
-		}
-	}
-
-	if err := r.storage.SaveFlow(r.Flow); err != nil {
+	if err := r.storage.SaveFlow(r.ctx, r.Flow); err != nil {
 		r.logger.Errorf("save flow status failed: %s", err.Error())
 		return err
 	}
@@ -342,7 +273,7 @@ func (r *runner) handleFlowCancel(event fsm.Event) error {
 		r.batchCanF()
 	}
 
-	cancelTasksErr := NewErrors()
+	cancelTasksErr := utils.NewErrors()
 	for _, t := range r.batch {
 		switch t.GetStatus() {
 		case flow.InitializingStatus, flow.RunningStatus, flow.PausedStatus:
@@ -358,15 +289,7 @@ func (r *runner) handleFlowCancel(event fsm.Event) error {
 
 	r.stop(event.Message)
 
-	hooks := r.GetHooks()
-	if hook, ok := hooks[flow.WhenExecuteCancel]; ok {
-		if err := hook(r.ctx, r.Flow, nil); err != nil {
-			r.logger.Errorf("run flow cancel hook error: %s", err.Error())
-			return err
-		}
-	}
-
-	if err := r.storage.SaveFlow(r.Flow); err != nil {
+	if err := r.storage.SaveFlow(r.ctx, r.Flow); err != nil {
 		r.logger.Errorf("save flow status failed: %s", err.Error())
 		return err
 	}
@@ -377,19 +300,19 @@ func (r *runner) handleFlowCancel(event fsm.Event) error {
 func (r *runner) runBatchTasks() error {
 	var (
 		wg         = sync.WaitGroup{}
-		taskErrors = NewErrors()
+		taskErrors = utils.NewErrors()
 	)
 
 	triggerTask := func(task runningTask) error {
-		r.logger.Infof("trigger task %s", task.Name())
-		if IsFinishedStatus(task.GetStatus()) {
-			r.logger.Warnf("task %s was finished(%s)", task.Name(), task.GetStatus())
+		r.logger.Infof("trigger task %s", task.Name)
+		if flow.IsFinishedStatus(task.GetStatus()) {
+			r.logger.Warnf("task %s was finished(%s)", task.Name, task.GetStatus())
 			return nil
 		}
 
 		select {
 		case <-r.ctx.Done():
-			r.logger.Infof("flow was closed, skip task %s trigger", task.Name())
+			r.logger.Infof("flow was closed, skip task %s trigger", task.Name)
 			return nil
 		default:
 			if err := task.Event(fsm.Event{Type: flow.TaskTriggerEvent, Status: task.GetStatus(), Obj: task.Task}); err != nil {
@@ -418,27 +341,6 @@ func (r *runner) runBatchTasks() error {
 		}
 
 		task.SetStatus(flow.InitializingStatus)
-		setupCtx := &flow.Context{
-			Context: r.ctx.Context,
-			Logger:  r.logger.With(fmt.Sprintf("task.%s.setup", task.Name())),
-			FlowId:  r.ID(),
-		}
-		if err := task.Setup(setupCtx); err != nil || !setupCtx.IsSucceed {
-			var msg string
-			if err != nil {
-				msg = fmt.Sprintf("task setup failed: %s", err.Error())
-			} else {
-				msg = setupCtx.Message
-			}
-
-			if updateTaskStatsErr := task.Event(fsm.Event{Type: flow.TaskExecuteErrorEvent, Status: task.GetStatus(), Obj: task.Task}); updateTaskStatsErr != nil {
-				setupCtx.Logger.Errorf("update task status failed: %s", updateTaskStatsErr.Error())
-			}
-
-			setupCtx.Logger.Warnf("context not got succeed: %s", msg)
-			return fmt.Errorf("task setup failed: %s", msg)
-		}
-
 		if err := triggerTask(r.batch[i]); err != nil {
 			return err
 		}
@@ -462,17 +364,10 @@ func (r *runner) taskRun(task runningTask) error {
 		defaultRetryTime = 3
 		err              error
 	)
-	ctx := &flow.Context{
-		Context:  r.batchCtx.Context,
-		Logger:   r.logger.With("task"),
-		FlowId:   r.batchCtx.FlowId,
-		MaxRetry: defaultRetryTime,
-		TaskName: task.Name(),
-	}
-	r.logger.Infof("task %s started", task.Name())
+	r.logger.Infof("task %s started", task.Name)
 	for {
 		currentTryTimes += 1
-		err = task.Task.Do(ctx)
+		err = task.ITask.Do(ctx)
 		if err == nil {
 			r.logger.Infof("task %s succeed", task.Name())
 			break
@@ -486,9 +381,9 @@ func (r *runner) taskRun(task runningTask) error {
 
 	if !ctx.IsSucceed {
 		msg := fmt.Sprintf("task %s failed: %s", task.Name(), ctx.Message)
-		policy := r.GetControlPolicy()
+		policy := r.ControlPolicy
 
-		updateStatsErrors := NewErrors()
+		updateStatsErrors := utils.NewErrors()
 		switch policy.FailedPolicy {
 		case flow.PolicyFastFailed:
 			err = r.pushEvent2FlowFSM(fsm.Event{Type: flow.ExecuteErrorEvent, Status: r.GetStatus(), Message: msg, Obj: r})
@@ -501,7 +396,7 @@ func (r *runner) taskRun(task runningTask) error {
 		if err != nil {
 			updateStatsErrors = append(updateStatsErrors, err)
 		}
-		if err = task.Event(fsm.Event{Type: flow.TaskExecuteErrorEvent, Status: task.GetStatus(), Message: ctx.Message, Obj: task.Task}); err != nil {
+		if err = task.Event(fsm.Event{Type: flow.TaskExecuteErrorEvent, Status: task.GetStatus(), Message: ctx.Message, Obj: task.ITask}); err != nil {
 			updateStatsErrors = append(updateStatsErrors, err)
 		}
 
@@ -512,24 +407,16 @@ func (r *runner) taskRun(task runningTask) error {
 	}
 
 	r.logger.Infof("run task %s finish", task.Name())
-	return task.Event(fsm.Event{Type: flow.TaskExecuteFinishEvent, Status: task.GetStatus(), Obj: task.Task})
+	return task.Event(fsm.Event{Type: flow.TaskExecuteFinishEvent, Status: task.GetStatus(), Obj: task.ITask})
 }
 
 func (r *runner) handleTaskRun(event fsm.Event) error {
-	task, ok := event.Obj.(flow.Task)
+	task, ok := event.Obj.(*flow.Task)
 	if !ok || reflect.ValueOf(task).Kind() != reflect.Ptr {
-		return fmt.Errorf("task %s obj not ptr", task.Name())
+		return fmt.Errorf("task %s obj not ptr", task.Name)
 	}
 
-	hooks := r.GetHooks()
-	if hook, ok := hooks[flow.WhenTaskTrigger]; ok {
-		if err := hook(r.ctx, r.Flow, task); err != nil {
-			r.logger.Errorf("run task trigger hook error: %s", err.Error())
-			return err
-		}
-	}
-
-	if err := r.storage.SaveTask(r.ID(), task); err != nil {
+	if err := r.storage.SaveTask(r.ctx, r.ID, task); err != nil {
 		r.logger.Errorf("save task status failed: %s", err.Error())
 		return err
 	}
@@ -537,19 +424,11 @@ func (r *runner) handleTaskRun(event fsm.Event) error {
 }
 
 func (r *runner) handleTaskSucceed(event fsm.Event) error {
-	task := event.Obj.(flow.Task)
-	r.logger.Infof("task %s succeed", task.Name())
-	task.Teardown(r.batchCtx)
+	task := event.Obj.(*flow.Task)
+	r.logger.Infof("task %s succeed", task.Name)
 
-	hooks := r.GetHooks()
-	if hook, ok := hooks[flow.WhenTaskExecuteSucceed]; ok {
-		if err := hook(r.ctx, r.Flow, task); err != nil {
-			r.logger.Errorf("run task succeed hook error: %s", err.Error())
-			return err
-		}
-	}
-
-	if err := r.storage.SaveTask(r.ID(), task); err != nil {
+	r.dag.UpdateTaskStatus(task.Name, task.Status)
+	if err := r.storage.SaveTask(r.ctx, r.ID, task); err != nil {
 		r.logger.Errorf("save task status failed: %s", err.Error())
 		return err
 	}
@@ -557,19 +436,11 @@ func (r *runner) handleTaskSucceed(event fsm.Event) error {
 }
 
 func (r *runner) handleTaskFailed(event fsm.Event) (err error) {
-	task := event.Obj.(flow.Task)
-	r.logger.Infof("task %s failed: %s", task.Name(), event.Message)
-	task.Teardown(r.batchCtx)
+	task := event.Obj.(*flow.Task)
+	r.logger.Infof("task %s failed: %s", task.Name, event.Message)
 
-	hooks := r.GetHooks()
-	if hook, ok := hooks[flow.WhenTaskExecuteFailed]; ok {
-		if err = hook(r.ctx, r.Flow, task); err != nil {
-			r.logger.Errorf("run task failed hook error: %s", err.Error())
-			return err
-		}
-	}
-
-	if err = r.storage.SaveTask(r.ID(), task); err != nil {
+	r.dag.UpdateTaskStatus(task.Name, task.Status)
+	if err = r.storage.SaveTask(r.ctx, r.ID, task); err != nil {
 		r.logger.Errorf("save task status failed: %s", err.Error())
 		return err
 	}
@@ -577,63 +448,17 @@ func (r *runner) handleTaskFailed(event fsm.Event) (err error) {
 }
 
 func (r *runner) handleTaskCanceled(event fsm.Event) error {
-	task := event.Obj.(flow.Task)
-	task.Teardown(r.batchCtx)
-	r.logger.Infof("task %s canceled", task.Name())
+	task := event.Obj.(*flow.Task)
+	r.logger.Infof("task %s canceled", task.Name)
 
-	hooks := r.GetHooks()
-	if hook, ok := hooks[flow.WhenTaskExecuteCancel]; ok {
-		if err := hook(r.ctx, r.Flow, task); err != nil {
-			r.logger.Errorf("run task cancel hook error: %s", err.Error())
-			return err
-		}
-	}
-
-	if err := r.storage.SaveTask(r.ID(), task); err != nil {
+	r.dag.UpdateTaskStatus(task.Name, task.Status)
+	if err := r.storage.SaveTask(r.ctx, r.ID, task); err != nil {
 		r.logger.Errorf("save task status failed: %s", err.Error())
 		return err
 	}
 	return nil
 }
 
-func (r *runner) handleTaskPaused(event fsm.Event) error {
-	task := event.Obj.(flow.Task)
-	r.logger.Infof("task %s paused", task.Name())
-
-	hooks := r.GetHooks()
-	if hook, ok := hooks[flow.WhenTaskExecutePause]; ok {
-		if err := hook(r.ctx, r.Flow, task); err != nil {
-			r.logger.Errorf("run task cancel hook error: %s", err.Error())
-			return err
-		}
-	}
-
-	if err := r.storage.SaveTask(r.ID(), task); err != nil {
-		r.logger.Errorf("save task status failed: %s", err.Error())
-		return err
-	}
-	return nil
-}
-
-func (r *runner) handleTaskResume(event fsm.Event) error {
-	task := event.Obj.(flow.Task)
-	r.logger.Infof("task %s resume", task.Name())
-
-	hooks := r.GetHooks()
-	if hook, ok := hooks[flow.WhenTaskExecuteResume]; ok {
-		if err := hook(r.ctx, r.Flow, task); err != nil {
-			r.logger.Errorf("run task resume hook error: %s", err.Error())
-			return err
-		}
-	}
-
-	if err := r.storage.SaveTask(r.ID(), task); err != nil {
-		r.logger.Errorf("save task status failed: %s", err.Error())
-		return err
-	}
-
-	return nil
-}
 func (r *runner) stop(msg string) {
 	r.logger.Debugf("stopping flow: %s", msg)
 	r.SetMessage(msg)
@@ -645,11 +470,6 @@ func (r *runner) stop(msg string) {
 				r.logger.Errorf("teardown panic: %v", err)
 			}
 		}()
-		r.Teardown(&flow.Context{
-			Context: r.ctx.Context,
-			Logger:  r.logger.With("teardown"),
-			FlowId:  r.ID(),
-		})
 	}()
 }
 
@@ -663,7 +483,7 @@ func (r *runner) pushEvent2FlowFSM(event fsm.Event) error {
 }
 
 type runningTask struct {
-	flow.Task
+	*flow.Task
 	*fsm.FSM
 }
 
@@ -673,32 +493,32 @@ func buildFlowFSM(r *runner) *fsm.FSM {
 		Logger: r.logger.With("fsm"),
 	})
 
-	m.From([]fsm.Status{flow.InitializingStatus}).
+	m.From([]string{flow.InitializingStatus}).
 		To(flow.RunningStatus).
 		When(flow.TriggerEvent).
 		Do(r.handleFlowRun)
 
-	m.From([]fsm.Status{flow.RunningStatus}).
+	m.From([]string{flow.RunningStatus}).
 		To(flow.SucceedStatus).
 		When(flow.ExecuteFinishEvent).
 		Do(r.handleFlowSucceed)
 
-	m.From([]fsm.Status{flow.InitializingStatus, flow.RunningStatus}).
+	m.From([]string{flow.InitializingStatus, flow.RunningStatus}).
 		To(flow.FailedStatus).
 		When(flow.ExecuteErrorEvent).
 		Do(r.handleFlowFailed)
 
-	m.From([]fsm.Status{flow.InitializingStatus, flow.PausedStatus}).
+	m.From([]string{flow.InitializingStatus, flow.PausedStatus}).
 		To(flow.CanceledStatus).
 		When(flow.ExecuteCancelEvent).
 		Do(r.handleFlowCancel)
 
-	m.From([]fsm.Status{flow.RunningStatus}).
+	m.From([]string{flow.RunningStatus}).
 		To(flow.PausedStatus).
 		When(flow.ExecutePauseEvent).
 		Do(r.handleFlowPause)
 
-	m.From([]fsm.Status{flow.PausedStatus}).
+	m.From([]string{flow.PausedStatus}).
 		To(flow.RunningStatus).
 		When(flow.ExecuteResumeEvent).
 		Do(r.handleFlowResume)
@@ -706,38 +526,28 @@ func buildFlowFSM(r *runner) *fsm.FSM {
 	return m
 }
 
-func buildFlowTaskFSM(r *runner, t flow.Task) *fsm.FSM {
+func buildFlowTaskFSM(r *runner, t flow.ITask) *fsm.FSM {
 	m := fsm.New(fsm.Option{
 		Obj:    t,
 		Logger: r.logger.With(fmt.Sprintf("task.%s.fsm", t.Name())),
 	})
 
-	m.From([]fsm.Status{flow.InitializingStatus}).
+	m.From([]string{flow.InitializingStatus}).
 		To(flow.RunningStatus).
 		When(flow.TaskTriggerEvent).
 		Do(r.handleTaskRun)
 
-	m.From([]fsm.Status{flow.RunningStatus}).
+	m.From([]string{flow.RunningStatus}).
 		To(flow.SucceedStatus).
 		When(flow.TaskExecuteFinishEvent).
 		Do(r.handleTaskSucceed)
 
-	m.From([]fsm.Status{flow.RunningStatus}).
-		To(flow.PausedStatus).
-		When(flow.TaskExecutePauseEvent).
-		Do(r.handleTaskPaused)
-
-	m.From([]fsm.Status{flow.PausedStatus}).
-		To(flow.RunningStatus).
-		When(flow.TaskExecuteResumeEvent).
-		Do(r.handleTaskResume)
-
-	m.From([]fsm.Status{flow.InitializingStatus, flow.RunningStatus, flow.PausedStatus}).
+	m.From([]string{flow.InitializingStatus, flow.RunningStatus, flow.PausedStatus}).
 		To(flow.CanceledStatus).
 		When(flow.TaskExecuteCancelEvent).
 		Do(r.handleTaskCanceled)
 
-	m.From([]fsm.Status{flow.InitializingStatus, flow.RunningStatus}).
+	m.From([]string{flow.InitializingStatus, flow.RunningStatus}).
 		To(flow.FailedStatus).
 		When(flow.TaskExecuteErrorEvent).
 		Do(r.handleTaskFailed)
