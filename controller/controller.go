@@ -19,14 +19,13 @@ package controller
 import (
 	"context"
 	"fmt"
-	"github.com/basenana/go-flow/executor"
-	"github.com/basenana/go-flow/storage"
+	"github.com/basenana/go-flow/flow"
 	"github.com/basenana/go-flow/utils"
 )
 
 type Controller struct {
-	flows   map[string]executor.Runner
-	storage storage.Interface
+	flows   map[string]flow.Runner
+	storage flow.Interface
 	logger  utils.Logger
 }
 
@@ -36,7 +35,7 @@ func (c *Controller) TriggerFlow(ctx context.Context, flowId string) error {
 		return err
 	}
 
-	r := executor.NewRunner(f, c.storage)
+	r := flow.NewRunner(f, c.storage)
 	c.flows[f.ID] = r
 
 	c.logger.Infof("trigger flow %s", flowId)
@@ -70,7 +69,7 @@ func (c *Controller) ResumeFlow(flowId string) error {
 
 func NewFlowController(opt Option) (*Controller, error) {
 	return &Controller{
-		flows:   make(map[string]executor.Runner),
+		flows:   make(map[string]flow.Runner),
 		storage: opt.Storage,
 		logger:  utils.NewLogger("go-flow"),
 	}, nil

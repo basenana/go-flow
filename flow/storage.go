@@ -14,15 +14,24 @@
    limitations under the License.
 */
 
-package storage
+package flow
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/basenana/go-flow/flow"
 	"github.com/coreos/etcd/clientv3"
+	"sync"
 )
+
+var ErrNotFound = fmt.Errorf("not found")
+
+type Interface interface {
+	GetFlow(ctx context.Context, flowId string) (*Flow, error)
+	SaveFlow(ctx context.Context, flow *Flow) error
+	DeleteFlow(ctx context.Context, flowId string) error
+	SaveTask(ctx context.Context, flowId string, task *Task) error
+}
 
 const (
 	etcdFlowValueKeyPrefix = "storage.flow.value."
@@ -34,7 +43,7 @@ type EtcdStorage struct {
 	Client *clientv3.Client
 }
 
-func (e EtcdStorage) GetFlow(ctx context.Context, flowId string) (*flow.Flow, error) {
+func (e EtcdStorage) GetFlow(ctx context.Context, flowId string) (*Flow, error) {
 	var valueByte []byte
 	if getValueResp, err := e.Client.Get(ctx, fmt.Sprintf(etcdFlowValueKeyTpl, flowId)); err != nil {
 		return nil, err
@@ -44,7 +53,7 @@ func (e EtcdStorage) GetFlow(ctx context.Context, flowId string) (*flow.Flow, er
 		valueByte = getValueResp.Kvs[0].Value
 	}
 
-	result := &flow.Flow{}
+	result := &Flow{}
 	err := json.Unmarshal(valueByte, result)
 	if err != nil {
 		return nil, fmt.Errorf("can't unmarshal flow value, value: %v, err: %v", string(valueByte), err)
@@ -52,15 +61,15 @@ func (e EtcdStorage) GetFlow(ctx context.Context, flowId string) (*flow.Flow, er
 	return result, nil
 }
 
-func (e EtcdStorage) GetFlows() ([]*flow.Flow, error) {
+func (e EtcdStorage) GetFlows() ([]*Flow, error) {
 	getValueResp, err := e.Client.Get(context.TODO(), etcdFlowValueKeyPrefix, clientv3.WithPrefix())
 	if err != nil {
 		return nil, err
 	}
 
-	values := make([]*flow.Flow, len(getValueResp.Kvs))
+	values := make([]*Flow, len(getValueResp.Kvs))
 	for i, v := range getValueResp.Kvs {
-		f := &flow.Flow{}
+		f := &Flow{}
 		err = json.Unmarshal(v.Value, f)
 		if err != nil {
 			return nil, err
@@ -70,7 +79,7 @@ func (e EtcdStorage) GetFlows() ([]*flow.Flow, error) {
 	return values, nil
 }
 
-func (e EtcdStorage) SaveFlow(ctx context.Context, flow *flow.Flow) error {
+func (e EtcdStorage) SaveFlow(ctx context.Context, flow *Flow) error {
 	valueByte, err := json.Marshal(flow)
 	if err != nil {
 		return err
@@ -89,7 +98,7 @@ func (e EtcdStorage) DeleteFlow(ctx context.Context, flowId string) error {
 	return err
 }
 
-func (e EtcdStorage) SaveTask(ctx context.Context, flowId string, task *flow.Task) error {
+func (e EtcdStorage) SaveTask(ctx context.Context, flowId string, task *Task) error {
 	taskByte, err := json.Marshal(task)
 	if err != nil {
 		return err
@@ -103,4 +112,47 @@ func (e EtcdStorage) SaveTask(ctx context.Context, flowId string, task *flow.Tas
 
 func NewEtcdStorage(client *clientv3.Client) Interface {
 	return &EtcdStorage{client}
+}
+
+const (
+	flowKeyTpl = "storage.flow.%s"
+	taskKeyTpl = "storage.flow.%s.task.%s"
+)
+
+type MemStorage struct {
+	sync.Map
+}
+
+func (m *MemStorage) GetFlow(ctx context.Context, flowId string) (*Flow, error) {
+	k := fmt.Sprintf(flowKeyTpl, flowId)
+	obj, ok := m.Load(k)
+	if !ok {
+		return nil, ErrNotFound
+	}
+	return obj.(*Flow), nil
+}
+
+func (m *MemStorage) SaveFlow(ctx context.Context, flow *Flow) error {
+	k := fmt.Sprintf(flowKeyTpl, flow.ID)
+	m.Store(k, flow)
+	return nil
+}
+
+func (m *MemStorage) DeleteFlow(ctx context.Context, flowId string) error {
+	k := fmt.Sprintf(flowKeyTpl, flowId)
+	_, ok := m.LoadAndDelete(k)
+	if !ok {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (m *MemStorage) SaveTask(ctx context.Context, flowId string, task *Task) error {
+	k := fmt.Sprintf(taskKeyTpl, flowId, task.Name)
+	m.Store(k, task)
+	return nil
+}
+
+func NewInMemoryStorage() Interface {
+	return &MemStorage{}
 }

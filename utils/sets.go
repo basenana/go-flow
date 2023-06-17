@@ -2,17 +2,19 @@ package utils
 
 type StringSet map[string]struct{}
 
-func (s StringSet) Insert(t string) {
-	s[t] = struct{}{}
+func (s StringSet) Insert(strList ...string) {
+	for _, str := range strList {
+		s[str] = struct{}{}
+	}
 }
-func (s StringSet) Has(task string) bool {
-	_, ok := s[task]
+func (s StringSet) Has(str string) bool {
+	_, ok := s[str]
 	return ok
 }
 
-func (s StringSet) Del(t string) {
-	if _, ok := s[t]; ok {
-		delete(s, t)
+func (s StringSet) Del(str string) {
+	if _, ok := s[str]; ok {
+		delete(s, str)
 	}
 }
 
@@ -27,6 +29,10 @@ func (s StringSet) Len() int {
 	return len(s)
 }
 
-func NewStringSet() StringSet {
-	return map[string]struct{}{}
+func NewStringSet(strList ...string) StringSet {
+	ss := map[string]struct{}{}
+	for _, str := range strList {
+		ss[str] = struct{}{}
+	}
+	return ss
 }
