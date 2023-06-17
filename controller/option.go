@@ -17,9 +17,9 @@
 package controller
 
 import (
-	"github.com/basenana/go-flow/storage"
+	"github.com/basenana/go-flow/flow"
 )
 
 type Option struct {
-	Storage storage.Interface
+	Storage flow.Interface
 }
