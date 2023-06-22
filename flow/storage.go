@@ -26,7 +26,7 @@ import (
 
 var ErrNotFound = fmt.Errorf("not found")
 
-type Interface interface {
+type Storage interface {
 	GetFlow(ctx context.Context, flowId string) (*Flow, error)
 	SaveFlow(ctx context.Context, flow *Flow) error
 	DeleteFlow(ctx context.Context, flowId string) error
@@ -110,7 +110,7 @@ func (e EtcdStorage) SaveTask(ctx context.Context, flowId string, task *Task) er
 	return err
 }
 
-func NewEtcdStorage(client *clientv3.Client) Interface {
+func NewEtcdStorage(client *clientv3.Client) Storage {
 	return &EtcdStorage{client}
 }
 
@@ -153,6 +153,6 @@ func (m *MemStorage) SaveTask(ctx context.Context, flowId string, task *Task) er
 	return nil
 }
 
-func NewInMemoryStorage() Interface {
+func NewInMemoryStorage() Storage {
 	return &MemStorage{}
 }
