@@ -21,17 +21,26 @@ import (
 	"errors"
 )
 
-const (
-	ShellOperator    = "shell"
-	PythonOperator   = "python"
-	MySQLOperator    = "mysql"
-	PostgresOperator = "postgres"
+var (
+	ExecutorNotFound          = errors.New("executor not found")
+	registeredExecutorBuilder []executorBuilder
 )
 
-var (
-	OperatorNotFound  = errors.New("operator not found")
-	OperatorIsExisted = errors.New("operator is existed")
-)
+func RegisterExecutorBuilder(name string, builder func(flow *Flow) Executor) {
+	registeredExecutorBuilder = append(registeredExecutorBuilder, executorBuilder{
+		executor: name,
+		build:    builder,
+	})
+}
+
+func newExecutor(name string, flow *Flow) (Executor, error) {
+	for _, builder := range registeredExecutorBuilder {
+		if builder.executor == name {
+			return builder.build(flow), nil
+		}
+	}
+	return nil, ExecutorNotFound
+}
 
 type Executor interface {
 	Setup(ctx context.Context) error
@@ -58,4 +67,9 @@ type Script struct {
 type Parameter struct {
 	FlowID  string
 	Workdir string
+}
+
+type executorBuilder struct {
+	executor string
+	build    func(flow *Flow) Executor
 }

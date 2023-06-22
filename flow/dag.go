@@ -31,9 +31,15 @@ type taskToward struct {
 }
 
 type DAG struct {
-	tasks     map[string]taskToward
-	crtBatch  []taskToward
+	// tasks contain all task
+	tasks map[string]taskToward
+
+	// crtBatch contain current task batch need to trigger
+	crtBatch []taskToward
+
+	// onFailure contain all the tasks that need to be executed after a task failure
 	onFailure []taskToward
+
 	hasFailed bool
 	mux       sync.Mutex
 }

@@ -17,7 +17,6 @@
 package flow
 
 const (
-	CreatingStatus     = "creating"
 	InitializingStatus = "initializing"
 	RunningStatus      = "running"
 	SucceedStatus      = "succeed"
@@ -26,20 +25,17 @@ const (
 	PausedStatus       = "paused"
 	CanceledStatus     = "canceled"
 
-	TriggerEvent           = "flow.execute.trigger"
-	ExecuteFinishEvent     = "flow.execute.finish"
-	ExecuteFailedEvent     = "flow.execute.failed"
-	ExecuteErrorEvent      = "flow.execute.error"
-	ExecutePauseEvent      = "flow.execute.pause"
-	ExecuteResumeEvent     = "flow.execute.resume"
-	ExecuteCancelEvent     = "flow.execute.cancel"
-	TaskTriggerEvent       = "task.execute.trigger"
-	TaskExecuteCancelEvent = "task.execute.cancel"
-	TaskExecuteFinishEvent = "task.execute.finish"
-	TaskExecuteErrorEvent  = "task.execute.error"
+	TriggerEvent       = "flow.execute.trigger"
+	ExecuteFinishEvent = "flow.execute.finish"
+	ExecuteFailedEvent = "flow.execute.failed"
+	ExecuteErrorEvent  = "flow.execute.error"
+	ExecutePauseEvent  = "flow.execute.pause"
+	ExecuteResumeEvent = "flow.execute.resume"
+	ExecuteCancelEvent = "flow.execute.cancel"
 
 	PolicyFastFailed = "fastFailed"
 	PolicyPaused     = "paused"
+	PolicyContinue   = "continue"
 
 	WhenTrigger            = "Trigger"
 	WhenExecuteSucceed     = "Succeed"
@@ -117,9 +113,13 @@ type ControlPolicy struct {
 	FailedPolicy string
 }
 
+func IsPausedStatus(sts string) bool {
+	return sts == PausedStatus
+}
+
 func IsFinishedStatus(sts string) bool {
 	switch sts {
-	case SucceedStatus, FailedStatus, CanceledStatus:
+	case SucceedStatus, FailedStatus, CanceledStatus, ErrorStatus:
 		return true
 	default:
 		return false

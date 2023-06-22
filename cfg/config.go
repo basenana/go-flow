@@ -14,10 +14,9 @@
    limitations under the License.
 */
 
-package flow
+package cfg
 
-import (
-	"github.com/basenana/go-flow/utils"
+var (
+	LocalWorkdirBase   = "/tmp"
+	LocalPythonVersion = "2"
 )
-
-var logger = utils.NewLogger("go-flow")
