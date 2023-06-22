@@ -14,7 +14,7 @@
    limitations under the License.
 */
 
-package flow
+package exec
 
 import (
 	"bytes"
@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"github.com/basenana/go-flow/cfg"
 	"github.com/basenana/go-flow/flow"
+	"github.com/basenana/go-flow/utils"
 	"os"
 	"os/exec"
 	"path"
@@ -61,11 +62,13 @@ func RegisterLocalOperatorBuilder(name string, builder func(operatorSpec flow.Sp
 }
 
 type LocalExecutor struct {
-	flow *flow.Flow
+	flow   *flow.Flow
+	logger utils.Logger
 }
 
 func (l *LocalExecutor) Setup(ctx context.Context) error {
 	if err := initFlowWorkDir(cfg.LocalWorkdirBase, l.flow.ID); err != nil {
+		l.logger.Errorf("init work dir failed: %s", err)
 		return err
 	}
 	return nil
@@ -73,6 +76,7 @@ func (l *LocalExecutor) Setup(ctx context.Context) error {
 
 func (l *LocalExecutor) Teardown(ctx context.Context) {
 	if err := cleanUpFlowWorkDir(cfg.LocalWorkdirBase, l.flow.ID); err != nil {
+		l.logger.Errorf("teardown failed: %s", err)
 		return
 	}
 }
@@ -86,6 +90,7 @@ func (l *LocalExecutor) DoOperation(ctx context.Context, operatorSpec flow.Spec)
 	}
 	operator, err := builder(operatorSpec)
 	if err != nil {
+		l.logger.Errorf("build operator %s failed: %s", operatorSpec.Type, err)
 		return err
 	}
 
@@ -93,11 +98,16 @@ func (l *LocalExecutor) DoOperation(ctx context.Context, operatorSpec flow.Spec)
 		FlowID:  l.flow.ID,
 		Workdir: flowWorkdir(cfg.LocalWorkdirBase, l.flow.ID),
 	}
-	return operator.Do(ctx, param)
+	err = operator.Do(ctx, param)
+	if err != nil {
+		l.logger.Errorf("run operator %s failed: %s", operatorSpec.Type, err)
+		return err
+	}
+	return nil
 }
 
 func NewLocalExecutor(flow *flow.Flow) flow.Executor {
-	return &LocalExecutor{flow: flow}
+	return &LocalExecutor{flow: flow, logger: utils.NewLogger("local").With(flow.ID)}
 }
 
 type localShellOperator struct {
@@ -114,12 +124,12 @@ func (l *localShellOperator) Do(ctx context.Context, param flow.Parameter) error
 	shellFile := fmt.Sprintf("script_%d.sh", time.Now().Unix())
 	shellFilePath := path.Join(param.Workdir, shellFile)
 
-	shF, err := os.Create(shellFilePath)
-	if err != nil {
-		return err
-	}
-
 	if l.spec.Script != nil && l.spec.Script.Content != "" {
+		shF, err := os.Create(shellFilePath)
+		if err != nil {
+			return err
+		}
+
 		switch command {
 		case "sh":
 			if _, err = shF.WriteString("#!/bin/sh\nset -xe\n"); err != nil {
@@ -129,11 +139,11 @@ func (l *localShellOperator) Do(ctx context.Context, param flow.Parameter) error
 		if _, err = shF.WriteString(l.spec.Script.Content); err != nil {
 			return err
 		}
-	}
 
-	err = os.Chmod(shF.Name(), 0755)
-	if err != nil {
-		return err
+		err = os.Chmod(shF.Name(), 0755)
+		if err != nil {
+			return err
+		}
 	}
 
 	var (
@@ -155,8 +165,11 @@ func (l *localShellOperator) Do(ctx context.Context, param flow.Parameter) error
 	cmd.Dir = param.Workdir
 	cmd.Stdout = &stdout
 
-	err = cmd.Run()
-	return err
+	err := cmd.Run()
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func newLocalShellOperator(operatorSpec flow.Spec) (flow.Operator, error) {

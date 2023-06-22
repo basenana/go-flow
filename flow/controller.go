@@ -36,6 +36,11 @@ func (c *Controller) TriggerFlow(ctx context.Context, flowId string) error {
 	if err != nil {
 		return err
 	}
+	r := NewRunner(f, c.storage)
+
+	c.mux.Lock()
+	c.runners[f.ID] = r
+	c.mux.Unlock()
 
 	c.logger.Infof("trigger flow %s", flowId)
 	go c.startFlowRunner(ctx, f)
@@ -43,11 +48,13 @@ func (c *Controller) TriggerFlow(ctx context.Context, flowId string) error {
 }
 
 func (c *Controller) startFlowRunner(ctx context.Context, flow *Flow) {
-	r := NewRunner(flow, c.storage)
-
 	c.mux.Lock()
-	c.runners[flow.ID] = r
+	r, ok := c.runners[flow.ID]
 	c.mux.Unlock()
+	if !ok {
+		c.logger.Errorf("start runner failed, err: runner %s not found", flow.ID)
+		return
+	}
 
 	defer func() {
 		c.mux.Lock()
@@ -102,10 +109,10 @@ func (c *Controller) Shutdown() error {
 	return nil
 }
 
-func NewFlowController(storage Storage) (*Controller, error) {
+func NewFlowController(storage Storage) *Controller {
 	return &Controller{
 		runners: make(map[string]Runner),
 		storage: storage,
 		logger:  utils.NewLogger("go-flow"),
-	}, nil
+	}
 }

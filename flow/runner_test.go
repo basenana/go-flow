@@ -19,6 +19,7 @@ package flow
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -33,6 +34,11 @@ func (t testExecutor) DoOperation(ctx context.Context, operatorSpec Spec) error 
 	if operatorSpec.Script != nil && len(operatorSpec.Script.Command) > 1 {
 		if operatorSpec.Script.Command[0] == "echo" && operatorSpec.Script.Command[1] == "failed" {
 			return fmt.Errorf("echo failed")
+		}
+
+		if operatorSpec.Script.Command[0] == "sleep" {
+			sTime, _ := strconv.Atoi(operatorSpec.Script.Command[1])
+			time.Sleep(time.Duration(sTime) * time.Second)
 		}
 	}
 	return nil
@@ -264,6 +270,21 @@ func Test_runner_ReStart(t *testing.T) {
 			}
 		})
 	}
+}
+
+func waitingFlowStatus(t *testing.T, fID, status string, s Storage) error {
+	for i := 0; i < 100; i++ {
+		f, err := s.GetFlow(context.TODO(), fID)
+		if err != nil {
+			return err
+		}
+		t.Logf("flow %s want %s, current status: %s", fID, status, f.Status)
+		if f.Status == status {
+			return nil
+		}
+		time.Sleep(time.Second)
+	}
+	return fmt.Errorf("timeout")
 }
 
 func waitingFlowFinish(t *testing.T, fID, status string, s Storage) error {

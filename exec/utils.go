@@ -14,16 +14,13 @@
    limitations under the License.
 */
 
-package flow
+package exec
 
 import (
 	"fmt"
-	"github.com/basenana/go-flow/utils"
 	"os"
 	"path"
 )
-
-var logger = utils.NewLogger("go-flow.exec")
 
 func initFlowWorkDir(base, flowID string) error {
 	dir := flowWorkdir(base, flowID)
