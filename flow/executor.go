@@ -53,10 +53,10 @@ type Operator interface {
 }
 
 type Spec struct {
-	Type      string
-	Script    *Script
-	Parameter map[string]string
-	Env       map[string]string
+	Type   string
+	Script *Script
+	Flags  map[string]string
+	Env    map[string]string
 }
 
 type Script struct {

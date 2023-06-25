@@ -21,14 +21,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/basenana/go-flow/cfg"
-	"github.com/basenana/go-flow/flow"
-	"github.com/basenana/go-flow/utils"
 	"os"
 	"os/exec"
 	"path"
 	"sync"
 	"time"
+
+	"github.com/basenana/go-flow/cfg"
+	"github.com/basenana/go-flow/flow"
+	"github.com/basenana/go-flow/utils"
 )
 
 const (
@@ -155,6 +156,10 @@ func (l *localShellOperator) Do(ctx context.Context, param flow.Parameter) error
 		cmd = exec.Command(l.spec.Script.Command[0], args...)
 	} else {
 		cmd = exec.Command(command, shellFilePath)
+	}
+
+	for k, v := range l.spec.Flags {
+		cmd.Args = append(cmd.Args, fmt.Sprintf("--%s=%s", k, v))
 	}
 
 	env := os.Environ()

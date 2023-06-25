@@ -18,11 +18,13 @@ package exec
 
 import (
 	"context"
-	"github.com/basenana/go-flow/cfg"
-	"github.com/basenana/go-flow/flow"
-	"github.com/google/uuid"
 	"os"
 	"testing"
+
+	"github.com/google/uuid"
+
+	"github.com/basenana/go-flow/cfg"
+	"github.com/basenana/go-flow/flow"
 )
 
 func init() {
@@ -44,8 +46,8 @@ func TestLocalExecutor_ShellOperator(t *testing.T) {
 				Script: &flow.Script{
 					Content: "echo 'Hello World!'",
 				},
-				Parameter: map[string]string{},
-				Env:       map[string]string{},
+				Flags: map[string]string{},
+				Env:   map[string]string{},
 			},
 		},
 		{
@@ -56,8 +58,8 @@ func TestLocalExecutor_ShellOperator(t *testing.T) {
 				Script: &flow.Script{
 					Command: []string{"sh", "-c", `echo "Hello World!"`},
 				},
-				Parameter: map[string]string{},
-				Env:       map[string]string{},
+				Flags: map[string]string{},
+				Env:   map[string]string{},
 			},
 		},
 	}
@@ -90,8 +92,8 @@ func TestLocalExecutor_PythonOperator(t *testing.T) {
 				Script: &flow.Script{
 					Content: `print("Hello World!")`,
 				},
-				Parameter: map[string]string{},
-				Env:       map[string]string{},
+				Flags: map[string]string{},
+				Env:   map[string]string{},
 			},
 		},
 		{
@@ -102,8 +104,8 @@ func TestLocalExecutor_PythonOperator(t *testing.T) {
 				Script: &flow.Script{
 					Command: []string{"python3", "-c", `print("Hello World!")`},
 				},
-				Parameter: map[string]string{},
-				Env:       map[string]string{},
+				Flags: map[string]string{},
+				Env:   map[string]string{},
 			},
 		},
 	}
