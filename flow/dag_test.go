@@ -31,36 +31,35 @@ func TestDAG_nextBatchTasks(t *testing.T) {
 		{
 			name: "default-1",
 			dag: mustBuildDAG([]Task{
-				{Name: "task-1", Next: NextTask{}, ActiveOnFailure: false},
-				{Name: "task-2", Next: NextTask{}, ActiveOnFailure: false},
-				{Name: "task-3", Next: NextTask{}, ActiveOnFailure: false},
+				{Name: "task-1", Next: NextTask{}},
+				{Name: "task-2", Next: NextTask{}},
+				{Name: "task-3", Next: NextTask{}},
 			}),
 			taskBatches: [][]string{{"task-1", "task-2", "task-3"}},
 		},
 		{
 			name: "default-2",
 			dag: mustBuildDAG([]Task{
-				{Name: "task-1", Next: NextTask{}, ActiveOnFailure: false},
-				{Name: "task-2", Next: NextTask{}, ActiveOnFailure: false},
-				{Name: "task-3", Next: NextTask{}, ActiveOnFailure: true},
+				{Name: "task-1", Next: NextTask{}},
+				{Name: "task-2", Next: NextTask{}},
 			}),
 			taskBatches: [][]string{{"task-1", "task-2"}},
 		},
 		{
 			name: "sequential-1",
 			dag: mustBuildDAG([]Task{
-				{Name: "task-1", Next: NextTask{OnSucceed: "task-2"}, ActiveOnFailure: false},
-				{Name: "task-2", Next: NextTask{OnSucceed: "task-3"}, ActiveOnFailure: false},
-				{Name: "task-3", Next: NextTask{}, ActiveOnFailure: false},
+				{Name: "task-1", Next: NextTask{OnSucceed: "task-2"}},
+				{Name: "task-2", Next: NextTask{OnSucceed: "task-3"}},
+				{Name: "task-3", Next: NextTask{}},
 			}),
 			taskBatches: [][]string{{"task-1"}, {"task-2"}, {"task-3"}},
 		},
 		{
 			name: "sequential-2",
 			dag: mustBuildDAG([]Task{
-				{Name: "task-1", Next: NextTask{OnSucceed: "task-3", OnFailed: "task-2"}, ActiveOnFailure: false},
-				{Name: "task-2", Next: NextTask{}, ActiveOnFailure: true},
-				{Name: "task-3", Next: NextTask{}, ActiveOnFailure: false},
+				{Name: "task-1", Next: NextTask{OnSucceed: "task-3", OnFailed: "task-2"}},
+				{Name: "task-2", Next: NextTask{}},
+				{Name: "task-3", Next: NextTask{}},
 			}),
 			taskBatches: [][]string{{"task-1"}, {"task-3"}},
 		},

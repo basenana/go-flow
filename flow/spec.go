@@ -36,19 +36,6 @@ const (
 	PolicyFastFailed = "fastFailed"
 	PolicyPaused     = "paused"
 	PolicyContinue   = "continue"
-
-	WhenTrigger            = "Trigger"
-	WhenExecuteSucceed     = "Succeed"
-	WhenExecuteFailed      = "Failed"
-	WhenExecutePause       = "Pause"
-	WhenExecuteResume      = "Resume"
-	WhenExecuteCancel      = "Cancel"
-	WhenTaskTrigger        = "TaskTrigger"
-	WhenTaskExecuteSucceed = "TaskSucceed"
-	WhenTaskExecuteFailed  = "TaskFailed"
-	WhenTaskExecutePause   = "TaskPause"
-	WhenTaskExecuteResume  = "TaskResume"
-	WhenTaskExecuteCancel  = "TaskCancel"
 )
 
 type Flow struct {
@@ -60,6 +47,7 @@ type Flow struct {
 	Message       string        `json:"message"`
 	ControlPolicy ControlPolicy `json:"control_policy"`
 	Tasks         []Task        `json:"tasks"`
+	OnFailure     []Task        `json:"on_failure"`
 }
 
 func (f *Flow) GetStatus() string {
@@ -79,13 +67,12 @@ func (f *Flow) SetMessage(msg string) {
 }
 
 type Task struct {
-	Name            string   `json:"name"`
-	Status          string   `json:"status"`
-	Message         string   `json:"message"`
-	OperatorSpec    Spec     `json:"operator_spec"`
-	Next            NextTask `json:"next,omitempty"`
-	ActiveOnFailure bool     `json:"active_on_failure"`
-	RetryOnFailed   int      `json:"retry_on_failed,omitempty"`
+	Name          string   `json:"name"`
+	Status        string   `json:"status"`
+	Message       string   `json:"message"`
+	OperatorSpec  Spec     `json:"operator_spec"`
+	Next          NextTask `json:"next,omitempty"`
+	RetryOnFailed int      `json:"retry_on_failed,omitempty"`
 }
 
 func (t *Task) GetStatus() string {
@@ -111,10 +98,6 @@ type NextTask struct {
 
 type ControlPolicy struct {
 	FailedPolicy string
-}
-
-func IsPausedStatus(sts string) bool {
-	return sts == PausedStatus
 }
 
 func IsFinishedStatus(sts string) bool {
