@@ -23,11 +23,10 @@ import (
 )
 
 type taskToward struct {
-	taskName        string
-	status          string
-	onSucceed       string
-	onFailed        string
-	activeOnFailure bool
+	taskName  string
+	status    string
+	onSucceed string
+	onFailed  string
 }
 
 type DAG struct {
@@ -36,9 +35,6 @@ type DAG struct {
 
 	// crtBatch contain current task batch need to trigger
 	crtBatch []taskToward
-
-	// onFailure contain all the tasks that need to be executed after a task failure
-	onFailure []taskToward
 
 	hasFailed bool
 	mux       sync.Mutex
@@ -84,12 +80,6 @@ func (g *DAG) nextBatchTasks() []taskToward {
 		return g.crtBatch
 	}
 
-	if g.hasFailed && len(g.onFailure) > 0 {
-		g.crtBatch = g.onFailure
-		g.onFailure = nil
-		return g.crtBatch
-	}
-
 	return nil
 }
 
@@ -101,11 +91,10 @@ func buildDAG(tasks []Task) (*DAG, error) {
 			return nil, fmt.Errorf("duplicate task %s definition", t.Name)
 		}
 		dag.tasks[t.Name] = taskToward{
-			taskName:        t.Name,
-			status:          t.Status,
-			onSucceed:       t.Next.OnSucceed,
-			onFailed:        t.Next.OnFailed,
-			activeOnFailure: t.ActiveOnFailure,
+			taskName:  t.Name,
+			status:    t.Status,
+			onSucceed: t.Next.OnSucceed,
+			onFailed:  t.Next.OnFailed,
 		}
 	}
 
@@ -130,10 +119,6 @@ func buildDAG(tasks []Task) (*DAG, error) {
 	firstTaskNameSet := utils.NewStringSet(firstTaskName...)
 	for i, t := range dag.tasks {
 		if firstTaskNameSet.Has(t.taskName) {
-			if t.activeOnFailure {
-				dag.onFailure = append(dag.onFailure, dag.tasks[i])
-				continue
-			}
 			dag.crtBatch = append(dag.crtBatch, dag.tasks[i])
 		}
 	}

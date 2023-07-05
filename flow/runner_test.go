@@ -30,7 +30,7 @@ func (t testExecutor) Setup(ctx context.Context) error {
 	return nil
 }
 
-func (t testExecutor) DoOperation(ctx context.Context, operatorSpec Spec) error {
+func (t testExecutor) DoOperation(ctx context.Context, task Task, operatorSpec Spec) error {
 	if operatorSpec.Script != nil && len(operatorSpec.Script.Command) > 1 {
 		if operatorSpec.Script.Command[0] == "echo" && operatorSpec.Script.Command[1] == "failed" {
 			return fmt.Errorf("echo failed")
