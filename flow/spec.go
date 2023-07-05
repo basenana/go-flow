@@ -91,6 +91,55 @@ func (t *Task) SetMessage(msg string) {
 	t.Message = msg
 }
 
+type Spec struct {
+	Type       string            `json:"type"`
+	Http       *Http             `json:"http,omitempty"`
+	Translate  *Translate        `json:"translate,omitempty"`
+	Script     *Script           `json:"script,omitempty"`
+	Parameters map[string]string `json:"parameters"`
+}
+
+type Script struct {
+	Content string            `json:"content"`
+	Command []string          `json:"command"`
+	Env     map[string]string `json:"env"`
+}
+
+type Http struct {
+	URL         string            `json:"url"`
+	Method      string            `json:"method"`
+	ContentType string            `json:"content_type"`
+	Body        string            `json:"body"`
+	Query       map[string]string `json:"query"`
+	Headers     map[string]string `json:"headers"`
+	Insecure    bool              `json:"insecure"`
+}
+
+type Translate struct {
+	Encoder *Encoder `json:"encoder,omitempty"`
+	Decoder *Decoder `json:"decoder,omitempty"`
+}
+
+const (
+	EncodeTypeGoTpl = "gotemplate"
+)
+
+type Encoder struct {
+	EncodeType string `json:"encode_type"`
+	Template   string `json:"template"`
+}
+
+const (
+	DecodeTypeJsonPath = "jsonpath"
+	DecodeTypeRegular  = "regular"
+)
+
+type Decoder struct {
+	DecodeType string `json:"decode_type"`
+	InputTask  string `json:"input_task"`
+	Pattern    string `json:"pattern"`
+}
+
 type NextTask struct {
 	OnSucceed string `json:"on_succeed,omitempty"`
 	OnFailed  string `json:"on_failed,omitempty"`

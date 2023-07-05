@@ -45,9 +45,8 @@ func TestLocalExecutor_ShellOperator(t *testing.T) {
 				Type: ShellOperator,
 				Script: &flow.Script{
 					Content: "echo 'Hello World!'",
+					Env:     map[string]string{},
 				},
-				Flags: map[string]string{},
-				Env:   map[string]string{},
 			},
 		},
 		{
@@ -57,20 +56,19 @@ func TestLocalExecutor_ShellOperator(t *testing.T) {
 				Type: ShellOperator,
 				Script: &flow.Script{
 					Command: []string{"sh", "-c", `echo "Hello World!"`},
+					Env:     map[string]string{},
 				},
-				Flags: map[string]string{},
-				Env:   map[string]string{},
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			l := NewLocalExecutor(tt.flow)
+			l := NewLocalExecutor(tt.flow, NewLocalOperatorBuilderRegister())
 			ctx := context.TODO()
 			if err := l.Setup(ctx); err != nil {
 				t.Errorf("Setup() error = %v", err)
 			}
-			if err := l.DoOperation(ctx, tt.spec); err != nil {
+			if err := l.DoOperation(ctx, flow.Task{}, tt.spec); err != nil {
 				t.Errorf("DoOperation() error = %v", err)
 			}
 			l.Teardown(ctx)
@@ -91,9 +89,8 @@ func TestLocalExecutor_PythonOperator(t *testing.T) {
 				Type: PythonOperator,
 				Script: &flow.Script{
 					Content: `print("Hello World!")`,
+					Env:     map[string]string{},
 				},
-				Flags: map[string]string{},
-				Env:   map[string]string{},
 			},
 		},
 		{
@@ -103,20 +100,19 @@ func TestLocalExecutor_PythonOperator(t *testing.T) {
 				Type: PythonOperator,
 				Script: &flow.Script{
 					Command: []string{"python3", "-c", `print("Hello World!")`},
+					Env:     map[string]string{},
 				},
-				Flags: map[string]string{},
-				Env:   map[string]string{},
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			l := NewLocalExecutor(tt.flow)
+			l := NewLocalExecutor(tt.flow, NewLocalOperatorBuilderRegister())
 			ctx := context.TODO()
 			if err := l.Setup(ctx); err != nil {
 				t.Errorf("Setup() error = %v", err)
 			}
-			if err := l.DoOperation(ctx, tt.spec); err != nil {
+			if err := l.DoOperation(ctx, flow.Task{}, tt.spec); err != nil {
 				t.Errorf("DoOperation() error = %v", err)
 			}
 			l.Teardown(ctx)
