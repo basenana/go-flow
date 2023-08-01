@@ -84,7 +84,7 @@ func TestDAG_nextBatchTasks(t *testing.T) {
 	}
 }
 
-func isMarchBatchTasks(crt []taskToward, expect []string) bool {
+func isMarchBatchTasks(crt []*taskToward, expect []string) bool {
 	var current []string
 	for _, t := range crt {
 		current = append(current, t.taskName)
