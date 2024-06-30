@@ -18,6 +18,7 @@ package flow
 
 import (
 	"fmt"
+	"github.com/basenana/go-flow/types"
 	"sync"
 
 	"github.com/basenana/go-flow/utils"
@@ -50,7 +51,7 @@ func (g *DAG) updateTaskStatus(taskName, status string) {
 	}
 	t.status = status
 	g.tasks[taskName] = t
-	if status == FailedStatus || status == ErrorStatus {
+	if status == types.FailedStatus || status == types.ErrorStatus {
 		g.hasFailed = true
 	}
 	return
@@ -61,17 +62,17 @@ func (g *DAG) nextBatchTasks() []*taskToward {
 	defer g.mux.Unlock()
 	for _, t := range g.crtBatch {
 		task := g.tasks[t.taskName]
-		if !IsFinishedStatus(task.status) {
+		if !types.IsFinishedStatus(task.status) {
 			return g.crtBatch
 		}
 	}
 
 	nextBatch := make([]*taskToward, 0)
 	for _, t := range g.crtBatch {
-		if t.status == SucceedStatus && t.onSucceed != "" {
+		if t.status == types.SucceedStatus && t.onSucceed != "" {
 			nextBatch = append(nextBatch, g.tasks[t.onSucceed])
 		}
-		if (t.status == FailedStatus || t.status == ErrorStatus) && t.onFailed != "" {
+		if (t.status == types.FailedStatus || t.status == types.ErrorStatus) && t.onFailed != "" {
 			nextBatch = append(nextBatch, g.tasks[t.onFailed])
 		}
 	}
@@ -84,18 +85,18 @@ func (g *DAG) nextBatchTasks() []*taskToward {
 	return nil
 }
 
-func buildDAG(tasks []Task) (*DAG, error) {
+func buildDAG(tasks []types.Task) (*DAG, error) {
 	dag := &DAG{tasks: map[string]*taskToward{}}
 
 	for _, t := range tasks {
-		if _, exist := dag.tasks[t.Name]; exist {
-			return nil, fmt.Errorf("duplicate task %s definition", t.Name)
+		if _, exist := dag.tasks[t.GetName()]; exist {
+			return nil, fmt.Errorf("duplicate task %s definition", t.GetName())
 		}
-		dag.tasks[t.Name] = &taskToward{
-			taskName:  t.Name,
-			status:    t.Status,
-			onSucceed: t.Next.OnSucceed,
-			onFailed:  t.Next.OnFailed,
+		dag.tasks[t.GetName()] = &taskToward{
+			taskName:  t.GetName(),
+			status:    t.GetStatue(),
+			onSucceed: t.Next().OnSucceed,
+			onFailed:  t.Next().OnFailed,
 		}
 	}
 

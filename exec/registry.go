@@ -2,10 +2,11 @@ package exec
 
 import (
 	"github.com/basenana/go-flow/flow"
+	"github.com/basenana/go-flow/types"
 	"sync"
 )
 
-type OperatorBuilder func(task flow.Task, operatorSpec flow.Spec) (flow.Operator, error)
+type OperatorBuilder func(task types.TaskSpec, operatorSpec types.Spec) (flow.Operator, error)
 
 type Registry struct {
 	builders map[string]OperatorBuilder

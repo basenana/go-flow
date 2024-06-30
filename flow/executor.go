@@ -19,6 +19,7 @@ package flow
 import (
 	"context"
 	"errors"
+	"github.com/basenana/go-flow/types"
 	"sync"
 )
 
@@ -27,14 +28,14 @@ var (
 	registeredExecutorBuilder []executorBuilder
 )
 
-func RegisterExecutorBuilder(name string, builder func(flow *Flow) Executor) {
+func RegisterExecutorBuilder(name string, builder func(flow types.Flow) Executor) {
 	registeredExecutorBuilder = append(registeredExecutorBuilder, executorBuilder{
 		executor: name,
 		build:    builder,
 	})
 }
 
-func newExecutor(name string, flow *Flow) (Executor, error) {
+func newExecutor(name string, flow types.Flow) (Executor, error) {
 	for _, builder := range registeredExecutorBuilder {
 		if builder.executor == name {
 			return builder.build(flow), nil
@@ -45,7 +46,7 @@ func newExecutor(name string, flow *Flow) (Executor, error) {
 
 type Executor interface {
 	Setup(ctx context.Context) error
-	DoOperation(ctx context.Context, task Task, operatorSpec Spec) error
+	DoOperation(ctx context.Context, task types.Task) error
 	Teardown(ctx context.Context)
 }
 
@@ -66,5 +67,5 @@ type ResultData struct {
 
 type executorBuilder struct {
 	executor string
-	build    func(flow *Flow) Executor
+	build    func(flow types.Flow) Executor
 }

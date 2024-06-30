@@ -17,7 +17,17 @@
 package flow
 
 import (
+	"github.com/basenana/go-flow/types"
 	"github.com/basenana/go-flow/utils"
 )
 
 var logger = utils.NewLogger("go-flow")
+
+func IsFinishedStatus(sts string) bool {
+	switch sts {
+	case types.SucceedStatus, types.FailedStatus, types.CanceledStatus, types.ErrorStatus:
+		return true
+	default:
+		return false
+	}
+}

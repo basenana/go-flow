@@ -19,16 +19,17 @@ package flow
 import (
 	"context"
 	"fmt"
+	"github.com/basenana/go-flow/types"
 	"sync"
 )
 
 var ErrNotFound = fmt.Errorf("not found")
 
 type Storage interface {
-	GetFlow(ctx context.Context, flowId string) (*Flow, error)
-	SaveFlow(ctx context.Context, flow *Flow) error
+	GetFlow(ctx context.Context, flowId string) (types.Flow, error)
+	SaveFlow(ctx context.Context, flow types.Flow) error
 	DeleteFlow(ctx context.Context, flowId string) error
-	SaveTask(ctx context.Context, flowId string, task *Task) error
+	SaveTask(ctx context.Context, flowId string, task types.Task) error
 }
 
 const (
@@ -40,17 +41,17 @@ type MemStorage struct {
 	sync.Map
 }
 
-func (m *MemStorage) GetFlow(ctx context.Context, flowId string) (*Flow, error) {
+func (m *MemStorage) GetFlow(ctx context.Context, flowId string) (types.Flow, error) {
 	k := fmt.Sprintf(flowKeyTpl, flowId)
 	obj, ok := m.Load(k)
 	if !ok {
 		return nil, ErrNotFound
 	}
-	return obj.(*Flow), nil
+	return obj.(types.Flow), nil
 }
 
-func (m *MemStorage) SaveFlow(ctx context.Context, flow *Flow) error {
-	k := fmt.Sprintf(flowKeyTpl, flow.ID)
+func (m *MemStorage) SaveFlow(ctx context.Context, flow types.Flow) error {
+	k := fmt.Sprintf(flowKeyTpl, flow.GetID())
 	m.Store(k, flow)
 	return nil
 }
@@ -64,8 +65,8 @@ func (m *MemStorage) DeleteFlow(ctx context.Context, flowId string) error {
 	return nil
 }
 
-func (m *MemStorage) SaveTask(ctx context.Context, flowId string, task *Task) error {
-	k := fmt.Sprintf(taskKeyTpl, flowId, task.Name)
+func (m *MemStorage) SaveTask(ctx context.Context, flowId string, task types.Task) error {
+	k := fmt.Sprintf(taskKeyTpl, flowId, task.GetName())
 	m.Store(k, task)
 	return nil
 }

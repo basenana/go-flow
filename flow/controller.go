@@ -19,6 +19,7 @@ package flow
 import (
 	"context"
 	"fmt"
+	"github.com/basenana/go-flow/types"
 	"github.com/basenana/go-flow/utils"
 	"strings"
 	"sync"
@@ -39,7 +40,7 @@ func (c *Controller) TriggerFlow(ctx context.Context, flowId string) error {
 	r := NewRunner(f, c.storage)
 
 	c.mux.Lock()
-	c.runners[f.ID] = r
+	c.runners[f.GetID()] = r
 	c.mux.Unlock()
 
 	c.logger.Infof("trigger flow %s", flowId)
@@ -47,18 +48,18 @@ func (c *Controller) TriggerFlow(ctx context.Context, flowId string) error {
 	return nil
 }
 
-func (c *Controller) startFlowRunner(ctx context.Context, flow *Flow) {
+func (c *Controller) startFlowRunner(ctx context.Context, flow types.Flow) {
 	c.mux.Lock()
-	r, ok := c.runners[flow.ID]
+	r, ok := c.runners[flow.GetID()]
 	c.mux.Unlock()
 	if !ok {
-		c.logger.Errorf("start runner failed, err: runner %s not found", flow.ID)
+		c.logger.Errorf("start runner failed, err: runner %s not found", flow.GetID())
 		return
 	}
 
 	defer func() {
 		c.mux.Lock()
-		delete(c.runners, flow.ID)
+		delete(c.runners, flow.GetID())
 		c.mux.Unlock()
 	}()
 

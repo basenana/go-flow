@@ -14,7 +14,7 @@
    limitations under the License.
 */
 
-package flow
+package types
 
 const (
 	InitializingStatus = "initializing"
@@ -37,59 +37,6 @@ const (
 	PolicyPaused     = "paused"
 	PolicyContinue   = "continue"
 )
-
-type Flow struct {
-	ID            string        `json:"id"`
-	Describe      string        `json:"describe"`
-	Executor      string        `json:"executor"`
-	Scheduler     string        `json:"scheduler"`
-	Status        string        `json:"status"`
-	Message       string        `json:"message"`
-	ControlPolicy ControlPolicy `json:"control_policy"`
-	Tasks         []Task        `json:"tasks"`
-	OnFailure     []Task        `json:"on_failure"`
-}
-
-func (f *Flow) GetStatus() string {
-	return f.Status
-}
-
-func (f *Flow) SetStatus(status string) {
-	f.Status = status
-}
-
-func (f *Flow) GetMessage() string {
-	return f.Message
-}
-
-func (f *Flow) SetMessage(msg string) {
-	f.Message = msg
-}
-
-type Task struct {
-	Name          string   `json:"name"`
-	Status        string   `json:"status"`
-	Message       string   `json:"message"`
-	OperatorSpec  Spec     `json:"operator_spec"`
-	Next          NextTask `json:"next,omitempty"`
-	RetryOnFailed int      `json:"retry_on_failed,omitempty"`
-}
-
-func (t *Task) GetStatus() string {
-	return t.Status
-}
-
-func (t *Task) SetStatus(status string) {
-	t.Status = status
-}
-
-func (t *Task) GetMessage() string {
-	return t.Message
-}
-
-func (t *Task) SetMessage(msg string) {
-	t.Message = msg
-}
 
 type Spec struct {
 	Type       string            `json:"type"`
