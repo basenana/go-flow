@@ -14,19 +14,26 @@
    limitations under the License.
 */
 
-package fsm
+package flow
 
 import (
 	"fmt"
-	"github.com/basenana/go-flow/utils"
 	"sync"
 )
+
+type statusEvent struct {
+	Type    string
+	Status  string
+	Message string
+}
+
+type fsmEventHandler func(evt statusEvent) error
 
 type edge struct {
 	from string
 	to   string
 	when string
-	do   Handler
+	do   fsmEventHandler
 	next *edge
 }
 
@@ -34,16 +41,15 @@ type edgeBuilder struct {
 	from []string
 	to   string
 	when string
-	do   Handler
+	do   fsmEventHandler
 }
 
 type FSM struct {
-	obj   Stateful
-	graph map[string]*edge
+	status string
+	graph  map[string]*edge
 
 	crtBuilder *edgeBuilder
 	mux        sync.Mutex
-	logger     utils.Logger
 }
 
 func (m *FSM) From(statues []string) *FSM {
@@ -67,18 +73,17 @@ func (m *FSM) When(event string) *FSM {
 	return m
 }
 
-func (m *FSM) Do(handler Handler) *FSM {
+func (m *FSM) Do(handler fsmEventHandler) *FSM {
 	m.buildWarp(func(builder *edgeBuilder) {
 		builder.do = handler
 	})
 	return m
 }
 
-func (m *FSM) Event(event Event) error {
+func (m *FSM) Event(event statusEvent) (err error) {
 	m.mux.Lock()
 	defer m.mux.Unlock()
 
-	m.logger.Debugf("handler fsm event: %s", event.Type)
 	head := m.graph[event.Type]
 	if head == nil {
 		return nil
@@ -86,21 +91,16 @@ func (m *FSM) Event(event Event) error {
 
 	defer func() {
 		if panicErr := recover(); panicErr != nil {
-			m.logger.Errorf("event %s handle panic: %v", event, panicErr)
+			err = fmt.Errorf("panic: %s", panicErr)
 		}
 	}()
 
 	for head != nil {
-		if m.obj.GetStatus() == head.from {
-			m.logger.Infof("change obj status from %s to %s with event: %s", head.from, head.to, event.Type)
-			m.obj.SetStatus(head.to)
-			if event.Message != "" {
-				m.obj.SetMessage(event.Message)
-			}
-
+		if m.status == head.from {
+			m.status = head.to
+			event.Status = m.status
 			if head.do != nil {
 				if handleErr := head.do(event); handleErr != nil {
-					m.logger.Errorf("event %s handle failed: %s", event.Type, handleErr.Error())
 					return handleErr
 				}
 			}
@@ -108,7 +108,8 @@ func (m *FSM) Event(event Event) error {
 		}
 		head = head.next
 	}
-	return fmt.Errorf("get event %s and current status is %s, no change path matched", event.Type, m.obj.GetStatus())
+	err = fmt.Errorf("get event %s and current status is %s, no change path matched", event.Type, m.status)
+	return err
 }
 
 func (m *FSM) buildWarp(f func(builder *edgeBuilder)) {
@@ -152,11 +153,7 @@ func (m *FSM) buildWarp(f func(builder *edgeBuilder)) {
 	}
 }
 
-func New(option Option) *FSM {
-	f := &FSM{
-		obj:    option.Obj,
-		graph:  map[string]*edge{},
-		logger: option.Logger,
-	}
+func NewFSM(status string) *FSM {
+	f := &FSM{status: status, graph: make(map[string]*edge)}
 	return f
 }

@@ -1,5 +1,5 @@
 /*
-   Copyright 2022 Go-Flow Authors
+   Copyright 2024 Go-Flow Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,13 +14,13 @@
    limitations under the License.
 */
 
-package fsm
+package flow
 
-import (
-	"github.com/basenana/go-flow/utils"
-)
+type UpdateEvent struct {
+	Flow *Flow
+	Task Task
+}
 
-type Option struct {
-	Obj    Stateful
-	Logger utils.Logger
+type Observer interface {
+	Handle(event UpdateEvent)
 }
