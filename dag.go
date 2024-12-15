@@ -66,7 +66,7 @@ func (g *DAGCoordinator) NextBatch(ctx context.Context) ([]Task, error) {
 	next := g.nextBatchTasks()
 	result := make([]Task, len(next))
 	for i, n := range next {
-		result[i] = g.tasks[n.taskName]
+		result[i] = n.task
 	}
 	return result, nil
 }
@@ -122,22 +122,23 @@ func (g *DAGCoordinator) buildDAG() error {
 			return fmt.Errorf("duplicate task %s definition", t.GetName())
 		}
 
-		director, ok := t.(TaskDirector)
+		director, ok := t.(directorWrapper)
 		if ok {
-			next := director.Next()
+			next := director.NextTask
 			g.towards[tname] = &taskToward{
 				taskName:  tname,
 				status:    t.GetStatus(),
 				onSucceed: next.OnSucceed,
 				onFailed:  next.OnFailed,
+				task:      director.Task,
 			}
-			g.tasks[tname] = director.GetTask()
 			continue
 		}
 
 		g.towards[tname] = &taskToward{
 			taskName: tname,
 			status:   t.GetStatus(),
+			task:     g.tasks[tname],
 		}
 	}
 
@@ -169,11 +170,6 @@ func (g *DAGCoordinator) buildDAG() error {
 	return nil
 }
 
-type TaskDirector interface {
-	GetTask() Task
-	Next() NextTask
-}
-
 type NextTask struct {
 	OnSucceed string
 	OnFailed  string
@@ -182,14 +178,6 @@ type NextTask struct {
 type directorWrapper struct {
 	Task
 	NextTask
-}
-
-func (d directorWrapper) GetTask() Task {
-	return d.Task
-}
-
-func (d directorWrapper) Next() NextTask {
-	return d.NextTask
 }
 
 func WithDirector(task Task, nextTask NextTask) Task {
@@ -204,6 +192,7 @@ type taskToward struct {
 	status    string
 	onSucceed string
 	onFailed  string
+	task      Task
 }
 
 type taskDep struct {
