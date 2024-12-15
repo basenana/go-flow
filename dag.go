@@ -1,5 +1,5 @@
 /*
-   Copyright 2023 Go-Flow Authors
+   Copyright 2024 Go-Flow Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,14 +14,12 @@
    limitations under the License.
 */
 
-package flow
+package go_flow
 
 import (
+	"context"
 	"fmt"
-	"github.com/basenana/go-flow/types"
 	"sync"
-
-	"github.com/basenana/go-flow/utils"
 )
 
 type taskToward struct {
@@ -31,49 +29,85 @@ type taskToward struct {
 	onFailed  string
 }
 
-type DAG struct {
+type DAGCoordinator struct {
 	// tasks contain all task
-	tasks map[string]*taskToward
+	tasks   map[string]Task
+	towards map[string]*taskToward
 
 	// crtBatch contain current task batch need to trigger
 	crtBatch []*taskToward
 
 	hasFailed bool
+	hasInited bool
 	mux       sync.Mutex
 }
 
-func (g *DAG) updateTaskStatus(taskName, status string) {
+var _ Coordinator = &DAGCoordinator{}
+
+func NewDAGCoordinator() *DAGCoordinator {
+	return &DAGCoordinator{
+		tasks:   make(map[string]Task),
+		towards: make(map[string]*taskToward),
+	}
+}
+
+func (g *DAGCoordinator) NewTask(task Task) {
+	g.tasks[task.GetName()] = task
+}
+
+func (g *DAGCoordinator) UpdateTask(task Task) {
+	g.updateTaskStatus(task.GetName(), task.GetStatue())
+}
+
+func (g *DAGCoordinator) NextBatch(ctx context.Context) ([]Task, error) {
 	g.mux.Lock()
 	defer g.mux.Unlock()
-	t, ok := g.tasks[taskName]
+
+	if !g.hasInited {
+		if err := g.buildDAG(); err != nil {
+			return nil, err
+		}
+		g.hasInited = true
+	}
+
+	next := g.nextBatchTasks()
+	result := make([]Task, len(next))
+	for i, n := range next {
+		result[i] = g.tasks[n.taskName]
+	}
+	return result, nil
+}
+
+func (g *DAGCoordinator) updateTaskStatus(taskName, status string) {
+	g.mux.Lock()
+	defer g.mux.Unlock()
+	t, ok := g.towards[taskName]
 	if !ok {
 		return
 	}
 	t.status = status
-	g.tasks[taskName] = t
-	if status == types.FailedStatus || status == types.ErrorStatus {
+	g.towards[taskName] = t
+	if status == FailedStatus || status == ErrorStatus {
 		g.hasFailed = true
 	}
 	return
 }
 
-func (g *DAG) nextBatchTasks() []*taskToward {
-	g.mux.Lock()
-	defer g.mux.Unlock()
+func (g *DAGCoordinator) nextBatchTasks() []*taskToward {
 	for _, t := range g.crtBatch {
-		task := g.tasks[t.taskName]
-		if !types.IsFinishedStatus(task.status) {
+		task := g.towards[t.taskName]
+		if !IsFinishedStatus(task.status) {
 			return g.crtBatch
 		}
 	}
 
 	nextBatch := make([]*taskToward, 0)
 	for _, t := range g.crtBatch {
-		if t.status == types.SucceedStatus && t.onSucceed != "" {
-			nextBatch = append(nextBatch, g.tasks[t.onSucceed])
+		if t.status == SucceedStatus && t.onSucceed != "" {
+			nextBatch = append(nextBatch, g.towards[t.onSucceed])
 		}
-		if (t.status == types.FailedStatus || t.status == types.ErrorStatus) && t.onFailed != "" {
-			nextBatch = append(nextBatch, g.tasks[t.onFailed])
+		if (t.status == FailedStatus || t.status == ErrorStatus) && t.onFailed != "" {
+			nextBatch = append(nextBatch, g.towards[t.onFailed])
 		}
 	}
 
@@ -85,51 +119,56 @@ func (g *DAG) nextBatchTasks() []*taskToward {
 	return nil
 }
 
-func buildDAG(tasks []types.Task) (*DAG, error) {
-	dag := &DAG{tasks: map[string]*taskToward{}}
-
-	for _, t := range tasks {
-		if _, exist := dag.tasks[t.GetName()]; exist {
-			return nil, fmt.Errorf("duplicate task %s definition", t.GetName())
+func (g *DAGCoordinator) buildDAG() error {
+	for _, t := range g.tasks {
+		if _, exist := g.towards[t.GetName()]; exist {
+			return fmt.Errorf("duplicate task %s definition", t.GetName())
 		}
-		dag.tasks[t.GetName()] = &taskToward{
+
+		director, ok := t.(TaskDirector)
+		if !ok {
+			return fmt.Errorf("task %s not a director", t.GetName())
+		}
+
+		next := director.Next()
+		g.towards[t.GetName()] = &taskToward{
 			taskName:  t.GetName(),
 			status:    t.GetStatue(),
-			onSucceed: t.Next().OnSucceed,
-			onFailed:  t.Next().OnFailed,
+			onSucceed: next.OnSucceed,
+			onFailed:  next.OnFailed,
 		}
 	}
 
-	for _, t := range dag.tasks {
+	for _, t := range g.towards {
 		if t.onSucceed != "" {
-			if _, exist := dag.tasks[t.onSucceed]; !exist {
-				return nil, fmt.Errorf("next task after %s succeed(%s) is does not define", t.taskName, t.onSucceed)
+			if _, exist := g.towards[t.onSucceed]; !exist {
+				return fmt.Errorf("next task after %s succeed(%s) is does not define", t.taskName, t.onSucceed)
 			}
 		}
 		if t.onFailed != "" {
-			if _, exist := dag.tasks[t.onFailed]; !exist {
-				return nil, fmt.Errorf("next task after %s failed(%s) is does not define", t.taskName, t.onFailed)
+			if _, exist := g.towards[t.onFailed]; !exist {
+				return fmt.Errorf("next task after %s failed(%s) is does not define", t.taskName, t.onFailed)
 			}
 		}
 	}
 
-	firstTaskName, err := newDagChecker(dag.tasks).firstBatch()
+	firstTaskName, err := newDagChecker(g.towards).firstBatch()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	firstTaskNameSet := utils.NewStringSet(firstTaskName...)
-	for i, t := range dag.tasks {
+	firstTaskNameSet := NewStringSet(firstTaskName...)
+	for i, t := range g.towards {
 		if firstTaskNameSet.Has(t.taskName) {
-			dag.crtBatch = append(dag.crtBatch, dag.tasks[i])
+			g.crtBatch = append(g.crtBatch, g.towards[i])
 		}
 	}
 
-	return dag, nil
+	return nil
 }
 
 type taskDep struct {
-	taskSet   utils.StringSet
+	taskSet   StringSet
 	taskEdges map[string][]string
 	preCount  map[string]int
 }
@@ -196,7 +235,7 @@ func (t *taskDep) order(firstTask string, nextTasks []string) {
 
 func newDagChecker(tasks map[string]*taskToward) *taskDep {
 	c := &taskDep{
-		taskSet:   utils.NewStringSet(),
+		taskSet:   NewStringSet(),
 		taskEdges: map[string][]string{},
 		preCount:  map[string]int{},
 	}

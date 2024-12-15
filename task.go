@@ -1,5 +1,5 @@
 /*
-   Copyright 2022 Go-Flow Authors
+   Copyright 2024 Go-Flow Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,11 +14,43 @@
    limitations under the License.
 */
 
-package fsm
+package go_flow
 
-type Event struct {
-	Type    string
+type Task interface {
+	GetName() string
+	GetStatue() string
+	SetStatue(string)
+	GetMessage() string
+	SetMessage(string)
+}
+
+type BasicTask struct {
+	Name    string
 	Status  string
 	Message string
-	Obj     Stateful
+}
+
+func (t *BasicTask) GetStatus() string {
+	return t.Status
+}
+
+func (t *BasicTask) SetStatus(status string) {
+	t.Status = status
+}
+
+func (t *BasicTask) GetMessage() string {
+	return t.Message
+}
+
+func (t *BasicTask) SetMessage(msg string) {
+	t.Message = msg
+}
+
+type TaskDirector interface {
+	Next() NextTask
+}
+
+type NextTask struct {
+	OnSucceed string
+	OnFailed  string
 }

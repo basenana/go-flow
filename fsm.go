@@ -14,13 +14,20 @@
    limitations under the License.
 */
 
-package fsm
+package go_flow
 
 import (
 	"fmt"
-	"github.com/basenana/go-flow/utils"
 	"sync"
 )
+
+type Event struct {
+	Type    string
+	Status  string
+	Message string
+}
+
+type Handler func(evt Event) error
 
 type edge struct {
 	from string
@@ -38,12 +45,11 @@ type edgeBuilder struct {
 }
 
 type FSM struct {
-	obj   Stateful
-	graph map[string]*edge
+	status string
+	graph  map[string]*edge
 
 	crtBuilder *edgeBuilder
 	mux        sync.Mutex
-	logger     utils.Logger
 }
 
 func (m *FSM) From(statues []string) *FSM {
@@ -74,11 +80,10 @@ func (m *FSM) Do(handler Handler) *FSM {
 	return m
 }
 
-func (m *FSM) Event(event Event) error {
+func (m *FSM) Event(event Event) (err error) {
 	m.mux.Lock()
 	defer m.mux.Unlock()
 
-	m.logger.Debugf("handler fsm event: %s", event.Type)
 	head := m.graph[event.Type]
 	if head == nil {
 		return nil
@@ -86,21 +91,15 @@ func (m *FSM) Event(event Event) error {
 
 	defer func() {
 		if panicErr := recover(); panicErr != nil {
-			m.logger.Errorf("event %s handle panic: %v", event, panicErr)
+			err = fmt.Errorf("panic: %s", panicErr)
 		}
 	}()
 
 	for head != nil {
-		if m.obj.GetStatus() == head.from {
-			m.logger.Infof("change obj status from %s to %s with event: %s", head.from, head.to, event.Type)
-			m.obj.SetStatus(head.to)
-			if event.Message != "" {
-				m.obj.SetMessage(event.Message)
-			}
-
+		if m.status == head.from {
+			m.status = head.to
 			if head.do != nil {
 				if handleErr := head.do(event); handleErr != nil {
-					m.logger.Errorf("event %s handle failed: %s", event.Type, handleErr.Error())
 					return handleErr
 				}
 			}
@@ -108,7 +107,8 @@ func (m *FSM) Event(event Event) error {
 		}
 		head = head.next
 	}
-	return fmt.Errorf("get event %s and current status is %s, no change path matched", event.Type, m.obj.GetStatus())
+	err = fmt.Errorf("get event %s and current status is %s, no change path matched", event.Type, m.status)
+	return err
 }
 
 func (m *FSM) buildWarp(f func(builder *edgeBuilder)) {
@@ -152,11 +152,7 @@ func (m *FSM) buildWarp(f func(builder *edgeBuilder)) {
 	}
 }
 
-func New(option Option) *FSM {
-	f := &FSM{
-		obj:    option.Obj,
-		graph:  map[string]*edge{},
-		logger: option.Logger,
-	}
+func NewFSM() *FSM {
+	f := &FSM{}
 	return f
 }
