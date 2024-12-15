@@ -14,8 +14,13 @@
    limitations under the License.
 */
 
-package go_flow
+package flow
+
+type UpdateEvent struct {
+	Flow *Flow
+	Task Task
+}
 
 type Observer interface {
-	Handle(event Event)
+	Handle(event UpdateEvent)
 }

@@ -14,7 +14,7 @@
    limitations under the License.
 */
 
-package go_flow
+package flow
 
 const (
 	InitializingStatus = "initializing"
@@ -33,10 +33,12 @@ const (
 	ExecuteResumeEvent = "flow.execute.resume"
 	ExecuteCancelEvent = "flow.execute.cancel"
 
-	PolicyFastFailed = "fastFailed"
-	PolicyPaused     = "paused"
-	PolicyContinue   = "continue"
+	FailAndInterrupt FailOperation = "interrupt"
+	FailAndPause     FailOperation = "pause"
+	FailButContinue  FailOperation = "continue"
 )
+
+type FailOperation string
 
 func IsFinishedStatus(sts string) bool {
 	switch sts {

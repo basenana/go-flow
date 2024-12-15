@@ -14,7 +14,7 @@
    limitations under the License.
 */
 
-package go_flow
+package flow
 
 type Flow struct {
 	ID      string
@@ -27,26 +27,30 @@ type Flow struct {
 	observer    []Observer
 }
 
-func (f *Flow) GetStatus() string {
-	return f.Status
-}
-
-func (f *Flow) SetStatus(status string) {
+func (f *Flow) SetStatus(status string, message string) {
 	f.Status = status
-}
-
-func (f *Flow) GetMessage() string {
-	return f.Message
-}
-
-func (f *Flow) SetMessage(msg string) {
-	f.Message = msg
+	f.Message = message
+	f.dispatch(UpdateEvent{Flow: f, Task: nil})
 }
 
 func (f *Flow) SetTaskStatue(task Task, status, msg string) {
+	for i, t := range f.tasks {
+		if t.GetName() == task.GetName() {
+			task = f.tasks[i]
+			if task.GetStatus() == status && task.GetMessage() == msg {
+				return
+			}
+
+			task.SetStatus(status)
+			task.SetMessage(msg)
+			f.coordinator.UpdateTask(task)
+			f.dispatch(UpdateEvent{Flow: f, Task: task})
+			return
+		}
+	}
 }
 
-func (f *Flow) dispatch(event Event) {
+func (f *Flow) dispatch(event UpdateEvent) {
 	for _, ob := range f.observer {
 		ob.Handle(event)
 	}
@@ -54,7 +58,7 @@ func (f *Flow) dispatch(event Event) {
 }
 
 func NewFlowBuilder(id string) *Builder {
-	return &Builder{id: id, executor: &simpleExecutor{}, coordinator: &pipelineCoordinator{}}
+	return &Builder{id: id, executor: &functionExecutor{}, coordinator: &pipelineCoordinator{}}
 }
 
 type Builder struct {

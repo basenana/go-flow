@@ -14,7 +14,7 @@
    limitations under the License.
 */
 
-package go_flow
+package flow
 
 import (
 	"context"
@@ -24,18 +24,11 @@ import (
 	"time"
 )
 
-type Runner interface {
-	Start(ctx context.Context) error
-	Pause() error
-	Resume() error
-	Cancel() error
+func NewRunner(f *Flow) *Runner {
+	return &Runner{Flow: f}
 }
 
-func NewRunner(f *Flow) Runner {
-	return &runner{Flow: f}
-}
-
-type runner struct {
+type Runner struct {
 	*Flow
 
 	ctx     context.Context
@@ -46,15 +39,14 @@ type runner struct {
 	mux     sync.Mutex
 }
 
-func (r *runner) Start(ctx context.Context) (err error) {
+func (r *Runner) Start(ctx context.Context) (err error) {
 	if IsFinishedStatus(r.Status) {
 		return
 	}
 
 	r.ctx, r.canF = context.WithCancel(ctx)
 	if err = r.executor.Setup(ctx); err != nil {
-		r.SetStatus(ErrorStatus)
-		r.SetMessage(err.Error())
+		r.SetStatus(ErrorStatus, err.Error())
 		return err
 	}
 
@@ -64,9 +56,8 @@ func (r *runner) Start(ctx context.Context) (err error) {
 		return
 	}
 
-	if err = r.pushEvent2FlowFSM(Event{Type: TriggerEvent, Status: r.Flow.GetStatus()}); err != nil {
-		r.SetStatus(ErrorStatus)
-		r.SetMessage(err.Error())
+	if err = r.pushEvent2FlowFSM(statusEvent{Type: TriggerEvent}); err != nil {
+		r.SetStatus(ErrorStatus, err.Error())
 		return err
 	}
 
@@ -76,35 +67,35 @@ func (r *runner) Start(ctx context.Context) (err error) {
 	return r.executor.Teardown(ctx)
 }
 
-func (r *runner) Pause() error {
+func (r *Runner) Pause() error {
 	if r.Status == RunningStatus {
-		return r.pushEvent2FlowFSM(Event{Type: ExecutePauseEvent})
+		return r.pushEvent2FlowFSM(statusEvent{Type: ExecutePauseEvent})
 	}
 	return nil
 }
 
-func (r *runner) Resume() error {
+func (r *Runner) Resume() error {
 	if r.Status == PausedStatus {
-		return r.pushEvent2FlowFSM(Event{Type: ExecuteResumeEvent})
+		return r.pushEvent2FlowFSM(statusEvent{Type: ExecuteResumeEvent})
 	}
 	return nil
 }
 
-func (r *runner) Cancel() error {
+func (r *Runner) Cancel() error {
 	if IsFinishedStatus(r.Status) {
 		return nil
 	}
-	return r.pushEvent2FlowFSM(Event{Type: ExecuteCancelEvent})
+	return r.pushEvent2FlowFSM(statusEvent{Type: ExecuteCancelEvent})
 }
 
-func (r *runner) handleJobRun(event Event) error {
+func (r *Runner) handleJobRun(event statusEvent) error {
 	r.mux.Lock()
 	defer r.mux.Unlock()
 	if r.started {
 		return nil
 	}
 	r.started = true
-	r.SetStatus(RunningStatus)
+	r.SetStatus(RunningStatus, event.Message)
 
 	go func() {
 		var (
@@ -127,12 +118,12 @@ func (r *runner) handleJobRun(event Event) error {
 				if errors.Is(err, context.Canceled) {
 					return
 				}
-				_ = r.pushEvent2FlowFSM(Event{Type: ExecuteErrorEvent, Status: r.GetStatus(), Message: err.Error()})
+				_ = r.pushEvent2FlowFSM(statusEvent{Type: ExecuteErrorEvent, Message: err.Error()})
 				return
 			}
 			if isFinish {
-				if !IsFinishedStatus(r.GetStatus()) {
-					_ = r.pushEvent2FlowFSM(Event{Type: ExecuteFinishEvent, Status: r.GetStatus(), Message: "finish"})
+				if !IsFinishedStatus(r.Status) {
+					_ = r.pushEvent2FlowFSM(statusEvent{Type: ExecuteFinishEvent, Message: "finish"})
 				}
 				return
 			}
@@ -141,30 +132,35 @@ func (r *runner) handleJobRun(event Event) error {
 	return nil
 }
 
-func (r *runner) handleJobPause(event Event) error {
+func (r *Runner) handleJobPause(event statusEvent) error {
+	r.SetStatus(PausedStatus, event.Message)
 	return nil
 }
 
-func (r *runner) handleJobResume(event Event) error {
+func (r *Runner) handleJobResume(event statusEvent) error {
+	r.SetStatus(RunningStatus, event.Message)
 	return nil
 }
 
-func (r *runner) handleJobSucceed(event Event) error {
-	r.close("succeed")
+func (r *Runner) handleJobSucceed(event statusEvent) error {
+	r.SetStatus(SucceedStatus, event.Message)
+	r.close()
 	return nil
 }
 
-func (r *runner) handleJobFailed(event Event) error {
-	r.close(event.Message)
+func (r *Runner) handleJobFailed(event statusEvent) error {
+	r.SetStatus(FailedStatus, event.Message)
+	r.close()
 	return nil
 }
 
-func (r *runner) handleJobCancel(event Event) error {
-	r.close(event.Message)
+func (r *Runner) handleJobCancel(event statusEvent) error {
+	r.SetStatus(CanceledStatus, event.Message)
+	r.close()
 	return nil
 }
 
-func (r *runner) batchRun() (finish bool, err error) {
+func (r *Runner) batchRun() (finish bool, err error) {
 	if !r.waitingForRunning(r.ctx) {
 		return true, nil
 	}
@@ -176,7 +172,8 @@ func (r *runner) batchRun() (finish bool, err error) {
 	}()
 
 	var batch []Task
-	if batch, err = r.nextBatch(); err != nil {
+	batch, err = r.coordinator.NextBatch(r.ctx)
+	if err != nil {
 		return
 	}
 
@@ -201,7 +198,7 @@ func (r *runner) batchRun() (finish bool, err error) {
 	return false, nil
 }
 
-func (r *runner) taskRun(ctx context.Context, task Task) (needCancel bool) {
+func (r *Runner) taskRun(ctx context.Context, task Task) (needCancel bool) {
 	var (
 		currentTryTimes = 0
 		err             error
@@ -212,13 +209,23 @@ func (r *runner) taskRun(ctx context.Context, task Task) (needCancel bool) {
 
 	r.SetTaskStatue(task, RunningStatus, "")
 	currentTryTimes += 1
-	_, err = r.executor.Exec(ctx, r.Flow, task)
+	err = r.executor.Exec(ctx, r.Flow, task)
 	if err != nil {
 		msg := fmt.Sprintf("task %s failed: %s", task.GetName(), err)
-		r.SetTaskStatue(task, FailedStatus, msg)
+
+		op := r.coordinator.HandleFail(task, err)
+		switch op {
+		case FailAndInterrupt:
+			r.SetTaskStatue(task, FailedStatus, msg)
+			_ = r.pushEvent2FlowFSM(statusEvent{Type: ExecuteFailedEvent, Message: msg})
+		case FailAndPause:
+			r.SetTaskStatue(task, PausedStatus, msg)
+			_ = r.pushEvent2FlowFSM(statusEvent{Type: ExecutePauseEvent, Message: msg})
+		case FailButContinue:
+			r.SetTaskStatue(task, FailedStatus, msg)
+		}
 
 		needCancel = true
-		_ = r.pushEvent2FlowFSM(Event{Type: ExecuteFailedEvent, Status: r.GetStatus(), Message: msg})
 		return
 	}
 
@@ -226,21 +233,13 @@ func (r *runner) taskRun(ctx context.Context, task Task) (needCancel bool) {
 	return
 }
 
-func (r *runner) nextBatch() ([]Task, error) {
-	nextBatch, err := r.coordinator.NextBatch(r.ctx)
-	if err != nil {
-		return nil, err
-	}
-	return nextBatch, nil
-}
-
-func (r *runner) waitingForRunning(ctx context.Context) bool {
+func (r *Runner) waitingForRunning(ctx context.Context) bool {
 	for {
 		select {
 		case <-ctx.Done():
 			return false
 		default:
-			switch r.GetStatus() {
+			switch r.Status {
 			case SucceedStatus, FailedStatus, CanceledStatus, ErrorStatus:
 				return false
 			case InitializingStatus, RunningStatus:
@@ -252,15 +251,13 @@ func (r *runner) waitingForRunning(ctx context.Context) bool {
 	}
 }
 
-func (r *runner) close(msg string) {
-	r.SetMessage(msg)
-
+func (r *Runner) close() {
 	if r.canF != nil {
 		r.canF()
 	}
 }
 
-func (r *runner) pushEvent2FlowFSM(event Event) error {
+func (r *Runner) pushEvent2FlowFSM(event statusEvent) error {
 	err := r.fsm.Event(event)
 	if err != nil {
 		return err
@@ -268,8 +265,8 @@ func (r *runner) pushEvent2FlowFSM(event Event) error {
 	return nil
 }
 
-func buildFlowFSM(r *runner) *FSM {
-	m := NewFSM()
+func buildFlowFSM(r *Runner) *FSM {
+	m := NewFSM(r.Status)
 
 	m.From([]string{InitializingStatus, RunningStatus}).
 		To(RunningStatus).
@@ -291,7 +288,7 @@ func buildFlowFSM(r *runner) *FSM {
 		When(ExecuteFailedEvent).
 		Do(r.handleJobFailed)
 
-	m.From([]string{InitializingStatus, PausedStatus}).
+	m.From([]string{InitializingStatus, RunningStatus, PausedStatus}).
 		To(CanceledStatus).
 		When(ExecuteCancelEvent).
 		Do(r.handleJobCancel)

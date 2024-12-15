@@ -14,20 +14,13 @@
    limitations under the License.
 */
 
-package go_flow
+package flow
 
 import (
 	"context"
 	"fmt"
 	"sync"
 )
-
-type taskToward struct {
-	taskName  string
-	status    string
-	onSucceed string
-	onFailed  string
-}
 
 type DAGCoordinator struct {
 	// tasks contain all task
@@ -56,7 +49,7 @@ func (g *DAGCoordinator) NewTask(task Task) {
 }
 
 func (g *DAGCoordinator) UpdateTask(task Task) {
-	g.updateTaskStatus(task.GetName(), task.GetStatue())
+	g.updateTaskStatus(task.GetName(), task.GetStatus())
 }
 
 func (g *DAGCoordinator) NextBatch(ctx context.Context) ([]Task, error) {
@@ -76,6 +69,10 @@ func (g *DAGCoordinator) NextBatch(ctx context.Context) ([]Task, error) {
 		result[i] = g.tasks[n.taskName]
 	}
 	return result, nil
+}
+
+func (g *DAGCoordinator) HandleFail(task Task, err error) FailOperation {
+	return FailButContinue
 }
 
 func (g *DAGCoordinator) updateTaskStatus(taskName, status string) {
@@ -120,22 +117,27 @@ func (g *DAGCoordinator) nextBatchTasks() []*taskToward {
 }
 
 func (g *DAGCoordinator) buildDAG() error {
-	for _, t := range g.tasks {
-		if _, exist := g.towards[t.GetName()]; exist {
+	for tname, t := range g.tasks {
+		if _, exist := g.towards[tname]; exist {
 			return fmt.Errorf("duplicate task %s definition", t.GetName())
 		}
 
 		director, ok := t.(TaskDirector)
-		if !ok {
-			return fmt.Errorf("task %s not a director", t.GetName())
+		if ok {
+			next := director.Next()
+			g.towards[tname] = &taskToward{
+				taskName:  tname,
+				status:    t.GetStatus(),
+				onSucceed: next.OnSucceed,
+				onFailed:  next.OnFailed,
+			}
+			g.tasks[tname] = director.GetTask()
+			continue
 		}
 
-		next := director.Next()
-		g.towards[t.GetName()] = &taskToward{
-			taskName:  t.GetName(),
-			status:    t.GetStatue(),
-			onSucceed: next.OnSucceed,
-			onFailed:  next.OnFailed,
+		g.towards[tname] = &taskToward{
+			taskName: tname,
+			status:   t.GetStatus(),
 		}
 	}
 
@@ -165,6 +167,43 @@ func (g *DAGCoordinator) buildDAG() error {
 	}
 
 	return nil
+}
+
+type TaskDirector interface {
+	GetTask() Task
+	Next() NextTask
+}
+
+type NextTask struct {
+	OnSucceed string
+	OnFailed  string
+}
+
+type directorWrapper struct {
+	Task
+	NextTask
+}
+
+func (d directorWrapper) GetTask() Task {
+	return d.Task
+}
+
+func (d directorWrapper) Next() NextTask {
+	return d.NextTask
+}
+
+func WithDirector(task Task, nextTask NextTask) Task {
+	return directorWrapper{
+		Task:     task,
+		NextTask: nextTask,
+	}
+}
+
+type taskToward struct {
+	taskName  string
+	status    string
+	onSucceed string
+	onFailed  string
 }
 
 type taskDep struct {

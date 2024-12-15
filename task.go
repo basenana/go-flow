@@ -14,20 +14,37 @@
    limitations under the License.
 */
 
-package go_flow
+package flow
+
+import (
+	"context"
+	"fmt"
+)
 
 type Task interface {
 	GetName() string
-	GetStatue() string
-	SetStatue(string)
+	GetStatus() string
+	SetStatus(string)
 	GetMessage() string
 	SetMessage(string)
+}
+
+type Executor interface {
+	Setup(ctx context.Context) error
+	Exec(ctx context.Context, flow *Flow, task Task) error
+	Teardown(ctx context.Context) error
 }
 
 type BasicTask struct {
 	Name    string
 	Status  string
 	Message string
+}
+
+var _ Task = &BasicTask{}
+
+func (t *BasicTask) GetName() string {
+	return t.Name
 }
 
 func (t *BasicTask) GetStatus() string {
@@ -46,11 +63,45 @@ func (t *BasicTask) SetMessage(msg string) {
 	t.Message = msg
 }
 
-type TaskDirector interface {
-	Next() NextTask
+type FunctionTask struct {
+	*BasicTask
+	runFn func(ctx context.Context) error
 }
 
-type NextTask struct {
-	OnSucceed string
-	OnFailed  string
+func (f *FunctionTask) Run(ctx context.Context) error {
+	return f.runFn(ctx)
+}
+
+func NewFuncTask(name string, runFn func(ctx context.Context) error) Task {
+	return &FunctionTask{
+		BasicTask: &BasicTask{
+			Name:   name,
+			Status: InitializingStatus,
+		},
+		runFn: runFn,
+	}
+}
+
+type Runnable interface {
+	Run(ctx context.Context) error
+}
+
+type functionExecutor struct{}
+
+var _ Executor = &functionExecutor{}
+
+func (s *functionExecutor) Exec(ctx context.Context, flow *Flow, task Task) error {
+	t, ok := task.(Runnable)
+	if !ok {
+		return fmt.Errorf("not a function")
+	}
+	return t.Run(ctx)
+}
+
+func (s *functionExecutor) Setup(ctx context.Context) error {
+	return nil
+}
+
+func (s *functionExecutor) Teardown(ctx context.Context) error {
+	return nil
 }

@@ -14,7 +14,7 @@
    limitations under the License.
 */
 
-package go_flow
+package flow
 
 import "context"
 
@@ -22,11 +22,13 @@ type Coordinator interface {
 	NewTask(task Task)
 	UpdateTask(task Task)
 	NextBatch(ctx context.Context) ([]Task, error)
+	HandleFail(task Task, err error) FailOperation
 }
 
 type pipelineCoordinator struct {
 	idx   int
 	tasks []Task
+	op    FailOperation
 }
 
 func (p *pipelineCoordinator) NewTask(task Task) {
@@ -39,7 +41,7 @@ func (p *pipelineCoordinator) UpdateTask(task Task) {
 		return
 	}
 
-	if task.GetStatue() == SucceedStatus {
+	if task.GetStatus() == SucceedStatus {
 		p.idx += 1
 	}
 }
@@ -50,6 +52,13 @@ func (p *pipelineCoordinator) NextBatch(ctx context.Context) ([]Task, error) {
 		return nil, nil
 	}
 	return []Task{crt}, nil
+}
+
+func (p *pipelineCoordinator) HandleFail(task Task, err error) FailOperation {
+	if p.op == "" {
+		return FailAndInterrupt
+	}
+	return p.op
 }
 
 func (p *pipelineCoordinator) getCurrentTask() Task {

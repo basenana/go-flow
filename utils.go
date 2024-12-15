@@ -14,7 +14,7 @@
    limitations under the License.
 */
 
-package go_flow
+package flow
 
 import (
 	"fmt"

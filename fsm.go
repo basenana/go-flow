@@ -14,26 +14,26 @@
    limitations under the License.
 */
 
-package go_flow
+package flow
 
 import (
 	"fmt"
 	"sync"
 )
 
-type Event struct {
+type statusEvent struct {
 	Type    string
 	Status  string
 	Message string
 }
 
-type Handler func(evt Event) error
+type fsmEventHandler func(evt statusEvent) error
 
 type edge struct {
 	from string
 	to   string
 	when string
-	do   Handler
+	do   fsmEventHandler
 	next *edge
 }
 
@@ -41,7 +41,7 @@ type edgeBuilder struct {
 	from []string
 	to   string
 	when string
-	do   Handler
+	do   fsmEventHandler
 }
 
 type FSM struct {
@@ -73,14 +73,14 @@ func (m *FSM) When(event string) *FSM {
 	return m
 }
 
-func (m *FSM) Do(handler Handler) *FSM {
+func (m *FSM) Do(handler fsmEventHandler) *FSM {
 	m.buildWarp(func(builder *edgeBuilder) {
 		builder.do = handler
 	})
 	return m
 }
 
-func (m *FSM) Event(event Event) (err error) {
+func (m *FSM) Event(event statusEvent) (err error) {
 	m.mux.Lock()
 	defer m.mux.Unlock()
 
@@ -98,6 +98,7 @@ func (m *FSM) Event(event Event) (err error) {
 	for head != nil {
 		if m.status == head.from {
 			m.status = head.to
+			event.Status = m.status
 			if head.do != nil {
 				if handleErr := head.do(event); handleErr != nil {
 					return handleErr
@@ -152,7 +153,7 @@ func (m *FSM) buildWarp(f func(builder *edgeBuilder)) {
 	}
 }
 
-func NewFSM() *FSM {
-	f := &FSM{}
+func NewFSM(status string) *FSM {
+	f := &FSM{status: status, graph: make(map[string]*edge)}
 	return f
 }
