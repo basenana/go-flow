@@ -31,8 +31,11 @@ func NewRunner(f *Flow) *Runner {
 type Runner struct {
 	*Flow
 
-	ctx     context.Context
-	canF    context.CancelFunc
+	flowCtx    context.Context
+	cancelFlow context.CancelFunc
+	shotCtx    context.Context
+	cancelShot context.CancelFunc
+
 	fsm     *FSM
 	stopCh  chan struct{}
 	started bool
@@ -44,7 +47,7 @@ func (r *Runner) Start(ctx context.Context) (err error) {
 		return
 	}
 
-	r.ctx, r.canF = context.WithCancel(ctx)
+	r.flowCtx, r.cancelFlow = context.WithCancel(ctx)
 	if err = r.executor.Setup(ctx); err != nil {
 		r.SetStatus(ErrorStatus, err.Error())
 		return err
@@ -71,14 +74,14 @@ func (r *Runner) Pause() error {
 	if r.Status == RunningStatus {
 		return r.pushEvent2FlowFSM(statusEvent{Type: ExecutePauseEvent})
 	}
-	return nil
+	return fmt.Errorf("current status is %s", r.Status)
 }
 
 func (r *Runner) Resume() error {
 	if r.Status == PausedStatus {
 		return r.pushEvent2FlowFSM(statusEvent{Type: ExecuteResumeEvent})
 	}
-	return nil
+	return fmt.Errorf("current status is %s", r.Status)
 }
 
 func (r *Runner) Cancel() error {
@@ -98,47 +101,67 @@ func (r *Runner) handleJobRun(event statusEvent) error {
 	r.SetStatus(RunningStatus, event.Message)
 
 	go func() {
-		var (
-			isFinish bool
-			err      error
-		)
-		defer func() {
-			close(r.stopCh)
-		}()
-
-		for {
-			select {
-			case <-r.ctx.Done():
-				err = r.ctx.Err()
-			default:
-				isFinish, err = r.batchRun()
-			}
-
-			if err != nil {
-				if errors.Is(err, context.Canceled) {
-					return
-				}
-				_ = r.pushEvent2FlowFSM(statusEvent{Type: ExecuteErrorEvent, Message: err.Error()})
-				return
-			}
-			if isFinish {
-				if !IsFinishedStatus(r.Status) {
-					_ = r.pushEvent2FlowFSM(statusEvent{Type: ExecuteFinishEvent, Message: "finish"})
-				}
-				return
-			}
-		}
+		defer func() { r.started = false }()
+		r.triggerFlow()
 	}()
 	return nil
 }
 
+func (r *Runner) triggerFlow() {
+	var (
+		isFinish bool
+		err      error
+	)
+
+	shotCtx, cancelShot := context.WithCancel(r.flowCtx)
+	defer cancelShot()
+
+	r.shotCtx = shotCtx
+	r.cancelShot = cancelShot
+	for {
+		select {
+		case <-r.flowCtx.Done():
+			err = r.flowCtx.Err()
+		default:
+		}
+
+		switch r.Status {
+		case RunningStatus:
+		case PausingStatus:
+			_ = r.pushEvent2FlowFSM(statusEvent{Type: ExecutePausedEvent, Message: ""})
+			return
+		default:
+			return
+		}
+
+		isFinish, err = r.runNextBatchTask(r.shotCtx)
+		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				return
+			}
+			_ = r.pushEvent2FlowFSM(statusEvent{Type: ExecuteErrorEvent, Message: err.Error()})
+			return
+		}
+		if isFinish {
+			if !IsFinishedStatus(r.Status) {
+				_ = r.pushEvent2FlowFSM(statusEvent{Type: ExecuteFinishEvent, Message: "finish"})
+			}
+			return
+		}
+	}
+
+}
+
 func (r *Runner) handleJobPause(event statusEvent) error {
-	r.SetStatus(PausedStatus, event.Message)
+	r.SetStatus(PausingStatus, event.Message)
+	if r.cancelShot != nil {
+		r.cancelShot()
+	}
 	return nil
 }
 
-func (r *Runner) handleJobResume(event statusEvent) error {
-	r.SetStatus(RunningStatus, event.Message)
+func (r *Runner) handleJobPaused(event statusEvent) error {
+	r.SetStatus(PausedStatus, event.Message)
 	return nil
 }
 
@@ -160,11 +183,7 @@ func (r *Runner) handleJobCancel(event statusEvent) error {
 	return nil
 }
 
-func (r *Runner) batchRun() (finish bool, err error) {
-	if !r.waitingForRunning(r.ctx) {
-		return true, nil
-	}
-
+func (r *Runner) runNextBatchTask(ctx context.Context) (finish bool, err error) {
 	defer func() {
 		if panicErr := doRecover(); panicErr != nil {
 			err = panicErr
@@ -172,7 +191,7 @@ func (r *Runner) batchRun() (finish bool, err error) {
 	}()
 
 	var batch []Task
-	batch, err = r.coordinator.NextBatch(r.ctx)
+	batch, err = r.coordinator.NextBatch(ctx)
 	if err != nil {
 		return
 	}
@@ -181,16 +200,12 @@ func (r *Runner) batchRun() (finish bool, err error) {
 		return true, nil
 	}
 
-	batchCtx, batchCanF := context.WithCancel(r.ctx)
-	defer batchCanF()
 	wg := sync.WaitGroup{}
 	for i := range batch {
 		wg.Add(1)
 		go func(t Task) {
 			defer wg.Done()
-			if needCancel := r.taskRun(batchCtx, t); needCancel {
-				batchCanF()
-			}
+			r.taskRun(ctx, t)
 		}(batch[i])
 	}
 	wg.Wait()
@@ -198,39 +213,39 @@ func (r *Runner) batchRun() (finish bool, err error) {
 	return false, nil
 }
 
-func (r *Runner) taskRun(ctx context.Context, task Task) (needCancel bool) {
-	var (
-		currentTryTimes = 0
-		err             error
-	)
-	if !r.waitingForRunning(ctx) {
+func (r *Runner) taskRun(ctx context.Context, task Task) {
+	if r.Status != RunningStatus {
 		return
 	}
 
 	r.SetTaskStatue(task, RunningStatus, "")
-	currentTryTimes += 1
-	err = r.executor.Exec(ctx, r.Flow, task)
+	err := r.executor.Exec(ctx, r.Flow, task)
 	if err != nil {
-		msg := fmt.Sprintf("task %s failed: %s", task.GetName(), err)
-
-		op := r.coordinator.HandleFail(task, err)
-		switch op {
-		case FailAndInterrupt:
-			r.SetTaskStatue(task, FailedStatus, msg)
-			_ = r.pushEvent2FlowFSM(statusEvent{Type: ExecuteFailedEvent, Message: msg})
-		case FailAndPause:
-			r.SetTaskStatue(task, PausedStatus, msg)
-			_ = r.pushEvent2FlowFSM(statusEvent{Type: ExecutePauseEvent, Message: msg})
-		case FailButContinue:
-			r.SetTaskStatue(task, FailedStatus, msg)
-		}
-
-		needCancel = true
+		r.handleTaskFail(ctx, task, err)
 		return
 	}
 
 	r.SetTaskStatue(task, SucceedStatus, "")
 	return
+}
+
+func (r *Runner) handleTaskFail(ctx context.Context, task Task, err error) {
+	msg := fmt.Sprintf("task %s failed: %s", task.GetName(), err)
+
+	op := r.coordinator.HandleFail(task, err)
+	switch op {
+	case FailAndInterrupt:
+		r.SetTaskStatue(task, FailedStatus, msg)
+		_ = r.pushEvent2FlowFSM(statusEvent{Type: ExecuteFailedEvent, Message: msg})
+	case FailAndPause:
+		r.SetTaskStatue(task, PausedStatus, msg)
+		_ = r.pushEvent2FlowFSM(statusEvent{Type: ExecutePauseEvent, Message: msg})
+	case FailButContinue:
+		r.SetTaskStatue(task, FailedStatus, msg)
+	default:
+		r.SetTaskStatue(task, FailedStatus, msg)
+		_ = r.pushEvent2FlowFSM(statusEvent{Type: ExecuteFailedEvent, Message: msg})
+	}
 }
 
 func (r *Runner) waitingForRunning(ctx context.Context) bool {
@@ -252,9 +267,10 @@ func (r *Runner) waitingForRunning(ctx context.Context) bool {
 }
 
 func (r *Runner) close() {
-	if r.canF != nil {
-		r.canF()
+	if r.cancelFlow != nil {
+		r.cancelFlow()
 	}
+	close(r.stopCh)
 }
 
 func (r *Runner) pushEvent2FlowFSM(event statusEvent) error {
@@ -294,14 +310,19 @@ func buildFlowFSM(r *Runner) *FSM {
 		Do(r.handleJobCancel)
 
 	m.From([]string{RunningStatus}).
-		To(PausedStatus).
+		To(PausingStatus).
 		When(ExecutePauseEvent).
 		Do(r.handleJobPause)
+
+	m.From([]string{PausingStatus}).
+		To(PausedStatus).
+		When(ExecutePausedEvent).
+		Do(r.handleJobPaused)
 
 	m.From([]string{PausedStatus}).
 		To(RunningStatus).
 		When(ExecuteResumeEvent).
-		Do(r.handleJobResume)
+		Do(r.handleJobRun)
 
 	return m
 }

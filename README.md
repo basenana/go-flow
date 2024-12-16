@@ -156,8 +156,8 @@ builder.Task(NewMyTask("my-task-1", make(map[string]string)))
 builder.Task(NewMyTask("my-task-2", make(map[string]string)))
 builder.Task(NewMyTask("my-task-3", make(map[string]string)))
 
-dagFlow := builder.Finish()
+myFlow := builder.Finish()
 
-runner := flow.NewRunner(dagFlow)
+runner := flow.NewRunner(myFlow)
 _ = runner.Start(context.TODO())
 ```

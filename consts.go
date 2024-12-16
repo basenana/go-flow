@@ -19,6 +19,7 @@ package flow
 const (
 	InitializingStatus = "initializing"
 	RunningStatus      = "running"
+	PausingStatus      = "pausing"
 	SucceedStatus      = "succeed"
 	FailedStatus       = "failed"
 	ErrorStatus        = "error"
@@ -30,6 +31,7 @@ const (
 	ExecuteFailedEvent = "flow.execute.failed"
 	ExecuteErrorEvent  = "flow.execute.error"
 	ExecutePauseEvent  = "flow.execute.pause"
+	ExecutePausedEvent = "flow.execute.paused"
 	ExecuteResumeEvent = "flow.execute.resume"
 	ExecuteCancelEvent = "flow.execute.cancel"
 
