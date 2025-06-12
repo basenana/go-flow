@@ -98,14 +98,29 @@ func (g *DAGCoordinator) nextBatchTasks() []*taskToward {
 		}
 	}
 
-	nextBatch := make([]*taskToward, 0)
-	for _, t := range g.crtBatch {
-		if t.status == SucceedStatus && t.onSucceed != "" {
-			nextBatch = append(nextBatch, g.towards[t.onSucceed])
+	var (
+		nextBatch = make([]*taskToward, 0)
+		uniq      = make(map[string]struct{})
+		next      *taskToward
+	)
+	for _, crt := range g.crtBatch {
+		if crt.status == SucceedStatus && crt.onSucceed != "" {
+			next = g.towards[crt.onSucceed]
 		}
-		if (t.status == FailedStatus || t.status == ErrorStatus) && t.onFailed != "" {
-			nextBatch = append(nextBatch, g.towards[t.onFailed])
+		if (crt.status == FailedStatus || crt.status == ErrorStatus) && crt.onFailed != "" {
+			next = g.towards[crt.onFailed]
 		}
+
+		if next == nil {
+			continue
+		}
+
+		if _, exist := uniq[next.taskName]; exist {
+			continue
+		}
+		uniq[next.taskName] = struct{}{}
+
+		nextBatch = append(nextBatch, next)
 	}
 
 	if len(nextBatch) != 0 {
