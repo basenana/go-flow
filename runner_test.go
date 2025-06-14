@@ -48,29 +48,30 @@ func TestSingleRunner(t *testing.T) {
 }
 
 func TestDAGRunner(t *testing.T) {
-	fb := NewFlowBuilder("test-dag-01").
-		Coordinator(NewDAGCoordinator()).
-		Observer(&logObserver{t: t})
+	coor := NewDAGCoordinator()
+	builder := NewFlowBuilder("dag-flow-01").Coordinator(coor)
 
-	fb.Task(WithDirector(NewFuncTask("dag-t1", func(ctx context.Context) error {
-		return fmt.Errorf("mocked error")
-	}), NextTask{
-		OnSucceed: "dag-t2",
-		OnFailed:  "dag-t3",
-	}))
-	fb.Task(NewFuncTask("dag-t2", func(ctx context.Context) error {
-		return nil
-	}))
-	fb.Task(NewFuncTask("dag-t3", func(ctx context.Context) error {
-		return nil
-	}))
-	fb.Task(NewFuncTask("dag-t4", func(ctx context.Context) error {
-		return nil
-	}))
+	task8 := NewFuncTask("task-8", NT("task-8"))
+	task7 := NewFuncTask("task-7", NT("task-7"))
+	task6 := NewFuncTask("task-6", NT("task-6"))
+	task5 := NewFuncTask("task-5", NT("task-5"))
+	task4 := NewFuncTask("task-4", NT("task-4"))
+	task3 := NewFuncTask("task-3", NT("task-3"))
+	task2 := NewFuncTask("task-2", NT("task-2"))
+	task1 := NewFuncTask("task-1", NT("task-1"))
 
-	f := fb.Finish()
+	builder.Task(WithDependent(task8, []string{"task-5", "task-4"}))
+	builder.Task(WithDependent(task7, []string{"task-6"}))
+	builder.Task(WithDependent(task6, []string{"task-5", "task-4", "task-3"}))
+	builder.Task(task5)
+	builder.Task(WithDependent(task3, []string{"task-1"}))
+	builder.Task(WithDependent(task4, []string{"task-2"}))
+	builder.Task(task2)
+	builder.Task(task1)
 
-	r := NewRunner(f)
+	dagFlow := builder.Finish()
+
+	r := NewRunner(dagFlow)
 
 	go func() {
 		if err := r.Start(context.Background()); err != nil {
@@ -78,7 +79,7 @@ func TestDAGRunner(t *testing.T) {
 		}
 	}()
 
-	if err := eventualStatus(f, SucceedStatus, time.Second*10); err != nil {
+	if err := eventualStatus(dagFlow, SucceedStatus, time.Second*10); err != nil {
 		t.Errorf("wait flow status failed: %s", err)
 		return
 	}
@@ -89,12 +90,9 @@ func TestPauseRunner(t *testing.T) {
 		Coordinator(NewDAGCoordinator()).
 		Observer(&logObserver{t: t})
 
-	fb.Task(WithDirector(NewFuncTask("task-t1", func(ctx context.Context) error {
-		return fmt.Errorf("mocked error")
-	}), NextTask{
-		OnSucceed: "task-t2",
-		OnFailed:  "task-t3",
-	}))
+	fb.Task(WithDependent(NewFuncTask("task-t1", func(ctx context.Context) error {
+		return nil
+	}), []string{"task-t2", "task-t3"}))
 	fb.Task(NewFuncTask("task-t2", func(ctx context.Context) error {
 		return nil
 	}))
@@ -144,12 +142,20 @@ func eventualStatus(f *Flow, status string, timeout time.Duration) error {
 	start := time.Now()
 	for {
 		if time.Since(start) > timeout {
-			return fmt.Errorf("expect %s, but got %s", status, f.Status)
+			return fmt.Errorf("expect %s, but got %s: %s", status, f.Status, f.Message)
 		}
 
 		if f.Status == status {
 			return nil
 		}
 		time.Sleep(time.Millisecond)
+	}
+}
+
+func NT(name string) func(ctx context.Context) error {
+	return func(ctx context.Context) error {
+		fmt.Printf("task %s running\n", name)
+		time.Sleep(time.Second)
+		return nil
 	}
 }

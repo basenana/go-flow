@@ -26,14 +26,35 @@ type Coordinator interface {
 	HandleFail(task Task, err error) FailOperation
 }
 
+type CoordinatorOptions struct {
+	failOP FailOperation
+}
+
+type CoordinatorOption func(*CoordinatorOptions)
+
+func WithFailOperation(op FailOperation) CoordinatorOption {
+	return func(o *CoordinatorOptions) {
+		o.failOP = op
+	}
+}
+
 type PipelineCoordinator struct {
 	idx   int
 	tasks []Task
 	op    FailOperation
 }
 
-func NewPipelineCoordinator(op FailOperation) *PipelineCoordinator {
-	return &PipelineCoordinator{op: FailAndInterrupt}
+func NewPipelineCoordinator(options ...CoordinatorOption) *PipelineCoordinator {
+	opt := &CoordinatorOptions{}
+	for _, optFn := range options {
+		optFn(opt)
+	}
+
+	if opt.failOP == "" {
+		opt.failOP = FailAndInterrupt
+	}
+
+	return &PipelineCoordinator{op: opt.failOP}
 }
 
 func (p *PipelineCoordinator) NewTask(task Task) {

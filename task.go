@@ -86,11 +86,20 @@ type Runnable interface {
 	Run(ctx context.Context) error
 }
 
+type wrapper interface {
+	unwrapped() Task
+}
+
 type simpleExecutor struct{}
 
 var _ Executor = &simpleExecutor{}
 
 func (s *simpleExecutor) Exec(ctx context.Context, flow *Flow, task Task) error {
+	w, ok := task.(wrapper)
+	if ok {
+		task = w.unwrapped()
+	}
+
 	t, ok := task.(Runnable)
 	if !ok {
 		return fmt.Errorf("not a runable task")
