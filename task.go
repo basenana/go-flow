@@ -86,22 +86,22 @@ type Runnable interface {
 	Run(ctx context.Context) error
 }
 
-type functionExecutor struct{}
+type simpleExecutor struct{}
 
-var _ Executor = &functionExecutor{}
+var _ Executor = &simpleExecutor{}
 
-func (s *functionExecutor) Exec(ctx context.Context, flow *Flow, task Task) error {
+func (s *simpleExecutor) Exec(ctx context.Context, flow *Flow, task Task) error {
 	t, ok := task.(Runnable)
 	if !ok {
-		return fmt.Errorf("not a function")
+		return fmt.Errorf("not a runable task")
 	}
 	return t.Run(ctx)
 }
 
-func (s *functionExecutor) Setup(ctx context.Context) error {
+func (s *simpleExecutor) Setup(ctx context.Context) error {
 	return nil
 }
 
-func (s *functionExecutor) Teardown(ctx context.Context) error {
+func (s *simpleExecutor) Teardown(ctx context.Context) error {
 	return nil
 }

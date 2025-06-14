@@ -16,15 +16,15 @@ You can create a workflow directly from functions:
 ```go
 builder := flow.NewFlowBuilder("sample-flow-01")
 
-builder.Task(flow.NewFuncTask("task-1", func(ctx context.Context) error {
+builder.Function("task-1", func(ctx context.Context) error {
     fmt.Println("do something in task 1")
     return nil
 }))
-builder.Task(flow.NewFuncTask("task-2", func(ctx context.Context) error {
+builder.Function("task-2", func(ctx context.Context) error {
     fmt.Println("do something in task 2")
     return nil
 }))
-builder.Task(flow.NewFuncTask("task-3", func(ctx context.Context) error {
+builder.Function("task-3", func(ctx context.Context) error {
     fmt.Println("do something in task 3")
     return nil
 }))

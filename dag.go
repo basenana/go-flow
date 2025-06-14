@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 )
 
 type DAGCoordinator struct {
@@ -31,7 +32,7 @@ type DAGCoordinator struct {
 	crtBatch []*taskToward
 
 	hasFailed bool
-	hasInited bool
+	init      atomic.Bool
 	mux       sync.Mutex
 }
 
@@ -52,23 +53,23 @@ func (g *DAGCoordinator) UpdateTask(task Task) {
 	g.updateTaskStatus(task.GetName(), task.GetStatus())
 }
 
-func (g *DAGCoordinator) NextBatch(ctx context.Context) ([]Task, error) {
-	g.mux.Lock()
-	defer g.mux.Unlock()
-
-	if !g.hasInited {
+func (g *DAGCoordinator) NextBatch(ctx context.Context) ([]string, error) {
+	if g.init.CompareAndSwap(false, true) {
 		if err := g.buildDAG(); err != nil {
 			return nil, err
 		}
-		g.hasInited = true
 	}
 
 	next := g.nextBatchTasks()
-	result := make([]Task, len(next))
+	result := make([]string, len(next))
 	for i, n := range next {
-		result[i] = n.task
+		result[i] = n.task.GetName()
 	}
 	return result, nil
+}
+
+func (g *DAGCoordinator) Finished() bool {
+	return true
 }
 
 func (g *DAGCoordinator) HandleFail(task Task, err error) FailOperation {
